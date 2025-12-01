@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect } from "react";
+import React, { useMemo, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Typography } from "#/ui/typography";
 import { I18nKey } from "#/i18n/declaration";
@@ -11,31 +11,87 @@ import { cn } from "#/utils/utils";
 import { USE_PLANNING_AGENT } from "#/utils/feature-flags";
 import { useAgentState } from "#/hooks/use-agent-state";
 import { AgentState } from "#/types/agent-state";
+import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { useUnifiedWebSocketStatus } from "#/hooks/use-unified-websocket-status";
+import { useSubConversationTaskPolling } from "#/hooks/query/use-sub-conversation-task-polling";
+import { useHandlePlanClick } from "#/hooks/use-handle-plan-click";
 
 export function ChangeAgentButton() {
-  const { t } = useTranslation();
-  const [contextMenuOpen, setContextMenuOpen] = React.useState(false);
+  const [contextMenuOpen, setContextMenuOpen] = useState<boolean>(false);
 
-  const conversationMode = useConversationStore(
-    (state) => state.conversationMode,
-  );
+  const { conversationMode, setConversationMode, subConversationTaskId } =
+    useConversationStore();
 
-  const setConversationMode = useConversationStore(
-    (state) => state.setConversationMode,
-  );
+  const webSocketStatus = useUnifiedWebSocketStatus();
+
+  const isWebSocketConnected = webSocketStatus === "CONNECTED";
 
   const shouldUsePlanningAgent = USE_PLANNING_AGENT();
 
   const { curAgentState } = useAgentState();
 
+  const { t } = useTranslation();
+
   const isAgentRunning = curAgentState === AgentState.RUNNING;
+
+  const { data: conversation } = useActiveConversation();
+
+  // Poll sub-conversation task and invalidate parent conversation when ready
+  useSubConversationTaskPolling(
+    subConversationTaskId,
+    conversation?.conversation_id || null,
+  );
+
+  // Get handlePlanClick and isCreatingConversation from custom hook
+  const { handlePlanClick, isCreatingConversation } = useHandlePlanClick();
 
   // Close context menu when agent starts running
   useEffect(() => {
-    if (isAgentRunning && contextMenuOpen) {
+    if ((isAgentRunning || !isWebSocketConnected) && contextMenuOpen) {
       setContextMenuOpen(false);
     }
-  }, [isAgentRunning, contextMenuOpen]);
+  }, [isAgentRunning, contextMenuOpen, isWebSocketConnected]);
+
+  const isButtonDisabled =
+    isAgentRunning ||
+    isCreatingConversation ||
+    !isWebSocketConnected ||
+    !shouldUsePlanningAgent;
+
+  // Handle Shift + Tab keyboard shortcut to cycle through modes
+  useEffect(() => {
+    if (isButtonDisabled) {
+      return undefined;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Check for Shift + Tab combination
+      if (event.shiftKey && event.key === "Tab") {
+        // Prevent default tab navigation behavior
+        event.preventDefault();
+        event.stopPropagation();
+
+        // Cycle between modes: code -> plan -> code
+        const nextMode = conversationMode === "code" ? "plan" : "code";
+        if (nextMode === "plan") {
+          handlePlanClick(event);
+        } else {
+          setConversationMode(nextMode);
+        }
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [
+    isButtonDisabled,
+    conversationMode,
+    setConversationMode,
+    handlePlanClick,
+  ]);
 
   const handleButtonClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -47,12 +103,6 @@ export function ChangeAgentButton() {
     event.preventDefault();
     event.stopPropagation();
     setConversationMode("code");
-  };
-
-  const handlePlanClick = (event: React.MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setConversationMode("plan");
   };
 
   const isExecutionAgent = conversationMode === "code";
@@ -80,11 +130,11 @@ export function ChangeAgentButton() {
       <button
         type="button"
         onClick={handleButtonClick}
-        disabled={isAgentRunning}
+        disabled={isButtonDisabled}
         className={cn(
           "flex items-center border border-[#4B505F] rounded-[100px] transition-opacity",
           !isExecutionAgent && "border-[#597FF4] bg-[#4A67BD]",
-          isAgentRunning
+          isButtonDisabled
             ? "opacity-50 cursor-not-allowed"
             : "cursor-pointer hover:opacity-80",
         )}
