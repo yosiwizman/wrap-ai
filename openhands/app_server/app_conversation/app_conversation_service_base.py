@@ -27,6 +27,7 @@ from openhands.sdk import Agent
 from openhands.sdk.context.agent_context import AgentContext
 from openhands.sdk.context.skills import load_user_skills
 from openhands.sdk.workspace.remote.async_remote_workspace import AsyncRemoteWorkspace
+from openhands.utils.utils import is_feature_env, is_local_env, is_staging_env
 
 _logger = logging.getLogger(__name__)
 PRE_COMMIT_HOOK = '.git/hooks/pre-commit'
@@ -41,6 +42,28 @@ class AppConversationServiceBase(AppConversationService, ABC):
 
     init_git_in_empty_workspace: bool
     user_context: UserContext
+
+    @staticmethod
+    def resolve_llm_base_url(llm_model: str | None, web_url: str | None) -> str | None:
+        """Resolve the LLM base URL based on the model and environment.
+
+        If the model starts with "openhands/" and the environment is local, staging,
+        or feature, returns the staging LLM proxy URL. Otherwise, returns None.
+
+        Args:
+            llm_model: The LLM model identifier (e.g., 'openhands/gpt-4')
+            web_url: The web URL to determine the environment
+
+        Returns:
+            The LLM base URL if conditions are met, otherwise None
+        """
+        if not llm_model or not llm_model.startswith('openhands/'):
+            return None
+
+        if is_local_env(web_url) or is_staging_env(web_url) or is_feature_env(web_url):
+            return 'https://llm-proxy.staging.all-hands.dev/'
+
+        return None
 
     async def _load_and_merge_all_skills(
         self,
