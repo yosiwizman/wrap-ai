@@ -37,7 +37,7 @@ from openhands.server.services.conversation_service import (
 )
 from openhands.server.shared import ConversationStoreImpl, config, conversation_manager
 from openhands.server.user_auth.user_auth import UserAuth
-from openhands.storage.data_models.conversation_metadata import ConversationTrigger
+from openhands.storage.data_models.conversation_metadata import ConversationMetadata, ConversationTrigger
 from openhands.utils.async_utils import GENERAL_TIMEOUT, call_async_from_sync
 
 # =================================================
@@ -238,6 +238,19 @@ class SlackNewConversationView(SlackViewInterface):
         await self._create_v0_conversation(jinja, provider_tokens, user_secrets)
         return self.conversation_id
 
+    async def initialize_new_conversation(self) -> ConversationMetadata:
+        conversation_metadata: ConversationMetadata = await initialize_conversation(  # type: ignore[assignment]
+            user_id=self.slack_to_openhands_user.keycloak_user_id,
+            conversation_id=None,
+            selected_repository=self.selected_repo,
+            selected_branch=None,
+            conversation_trigger=ConversationTrigger.SLACK,
+        )
+
+        self.conversation_id = conversation_metadata.conversation_id
+        return conversation_metadata
+
+
     async def _create_v0_conversation(
         self, jinja: Environment, provider_tokens, user_secrets
     ) -> None:
@@ -268,6 +281,7 @@ class SlackNewConversationView(SlackViewInterface):
         )
 
         self.conversation_id = agent_loop_info.conversation_id
+        logger.info(f'[Slack]: Created V0 conversation: {self.conversation_id}')
         await self.save_slack_convo()
 
     async def _create_v1_conversation(
@@ -275,10 +289,8 @@ class SlackNewConversationView(SlackViewInterface):
     ) -> None:
         """Create conversation using the new V1 app conversation system."""
 
+        await self.initialize_new_conversation()
         user_instructions, conversation_instructions = self._get_instructions(jinja)
-
-        # Generate a new conversation ID
-        self.conversation_id = str(uuid4())
 
         # Create the initial message request
         initial_message = SendMessageRequest(
@@ -332,6 +344,7 @@ class SlackNewConversationView(SlackViewInterface):
                         f'Failed to start V1 conversation: {task.detail}'
                     )
 
+        logger.info(f'[Slack V1]: Created new conversation: {self.conversation_id}')
         await self.save_slack_convo()
 
     def get_callback_id(self) -> str:
