@@ -232,8 +232,8 @@ class SlackNewConversationView(SlackViewInterface):
                 return self.conversation_id
 
             except Exception as e:
-                logger.warning(
-                    f'Error creating V1 conversation, falling back to V0: {e}'
+                logger.error(
+                    f'Error creating V1 conversation, falling back to V0: {e}', exc_info=True
                 )
                 # Reset v1 flag since we're falling back to v0
                 self.v1 = False
