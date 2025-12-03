@@ -71,12 +71,16 @@ class AuthUserContext(UserContext):
         results = {}
 
         # Include custom secrets...
-        secrets = await self.user_auth.get_user_secrets()
+        secrets = await self.user_auth.get_secrets()
         if secrets:
             for name, custom_secret in secrets.custom_secrets.items():
                 results[name] = StaticSecret(value=custom_secret.secret)
 
         return results
+
+    async def get_mcp_api_key(self) -> str | None:
+        mcp_api_key = await self.user_auth.get_mcp_api_key()
+        return mcp_api_key
 
 
 USER_ID_ATTR = 'user_id'

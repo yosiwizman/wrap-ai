@@ -28,11 +28,7 @@ import { KeyStatusIcon } from "#/components/features/settings/key-status-icon";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { getProviderId } from "#/utils/map-provider";
 import { DEFAULT_OPENHANDS_MODEL } from "#/utils/verified-models";
-import { useSubscriptionAccess } from "#/hooks/query/use-subscription-access";
-import { UpgradeBannerWithBackdrop } from "#/components/features/settings/upgrade-banner-with-backdrop";
-import { useCreateSubscriptionCheckoutSession } from "#/hooks/mutation/stripe/use-create-subscription-checkout-session";
-import { useIsAuthed } from "#/hooks/query/use-is-authed";
-import { cn } from "#/utils/utils";
+import { USE_V1_CONVERSATION_API } from "#/utils/feature-flags";
 
 interface OpenHandsApiKeyHelpProps {
   testId: string;
@@ -74,10 +70,6 @@ function LlmSettingsScreen() {
   const { data: resources } = useAIConfigOptions();
   const { data: settings, isLoading, isFetching } = useSettings();
   const { data: config } = useConfig();
-  const { data: subscriptionAccess } = useSubscriptionAccess();
-  const { data: isAuthed } = useIsAuthed();
-  const { mutate: createSubscriptionCheckoutSession } =
-    useCreateSubscriptionCheckoutSession();
 
   const [view, setView] = React.useState<"basic" | "advanced">("basic");
 
@@ -111,9 +103,24 @@ function LlmSettingsScreen() {
         : (settings?.SECURITY_ANALYZER ?? DEFAULT_SETTINGS.SECURITY_ANALYZER),
     );
 
+  const [selectedProvider, setSelectedProvider] = React.useState<string | null>(
+    null,
+  );
+
   const modelsAndProviders = organizeModelsAndProviders(
     resources?.models || [],
   );
+
+  // Determine if we should hide the API key input and use OpenHands-managed key (when using OpenHands provider in SaaS mode)
+  const currentModel = currentSelectedModel || settings?.LLM_MODEL;
+  const isOpenHandsProvider =
+    (view === "basic" && selectedProvider === "openhands") ||
+    (view === "advanced" && currentModel?.startsWith("openhands/"));
+  const isSaasMode = config?.APP_MODE === "saas";
+  const shouldUseOpenHandsKey = isOpenHandsProvider && isSaasMode;
+
+  // Determine if we should hide the agent dropdown when V1 conversation API feature flag is enabled
+  const isV1Enabled = USE_V1_CONVERSATION_API();
 
   React.useEffect(() => {
     const determineWhetherToToggleAdvancedSettings = () => {
@@ -205,10 +212,13 @@ function LlmSettingsScreen() {
 
     const fullLlmModel = provider && model && `${provider}/${model}`;
 
+    // Use OpenHands-managed key for OpenHands provider in SaaS mode
+    const finalApiKey = shouldUseOpenHandsKey ? null : apiKey;
+
     saveSettings(
       {
         LLM_MODEL: fullLlmModel,
-        llm_api_key: apiKey || null,
+        llm_api_key: finalApiKey || null,
         SEARCH_API_KEY: searchApiKey || "",
         CONFIRMATION_MODE: confirmationMode,
         SECURITY_ANALYZER:
@@ -253,11 +263,14 @@ function LlmSettingsScreen() {
       .get("security-analyzer-input")
       ?.toString();
 
+    // Use OpenHands-managed key for OpenHands provider in SaaS mode
+    const finalApiKey = shouldUseOpenHandsKey ? null : apiKey;
+
     saveSettings(
       {
         LLM_MODEL: model,
         LLM_BASE_URL: baseUrl,
-        llm_api_key: apiKey || null,
+        llm_api_key: finalApiKey || null,
         SEARCH_API_KEY: searchApiKey || "",
         AGENT: agent,
         CONFIRMATION_MODE: confirmationMode,
@@ -291,7 +304,10 @@ function LlmSettingsScreen() {
     });
   };
 
-  const handleModelIsDirty = (model: string | null) => {
+  const handleModelIsDirty = (
+    provider: string | null,
+    model: string | null,
+  ) => {
     // openai providers are special case; see ModelSelector
     // component for details
     const modelIsDirty = model !== settings?.LLM_MODEL.replace("openai/", "");
@@ -301,6 +317,15 @@ function LlmSettingsScreen() {
     }));
 
     // Track the currently selected model for help text display
+    setCurrentSelectedModel(model);
+    setSelectedProvider(provider);
+  };
+
+  const onDefaultValuesChanged = (
+    provider: string | null,
+    model: string | null,
+  ) => {
+    setSelectedProvider(provider);
     setCurrentSelectedModel(model);
   };
 
@@ -440,41 +465,16 @@ function LlmSettingsScreen() {
 
   if (!settings || isFetching) return <LlmSettingsInputsSkeleton />;
 
-  // Show upgrade banner and disable form in SaaS mode when user doesn't have an active subscription
-  const shouldShowUpgradeBanner =
-    config?.APP_MODE === "saas" && !subscriptionAccess;
-
   const formAction = (formData: FormData) => {
-    // Prevent form submission for unsubscribed SaaS users
-    if (shouldShowUpgradeBanner) return;
-
     if (view === "basic") basicFormAction(formData);
     else advancedFormAction(formData);
   };
 
   return (
-    <div
-      data-testid="llm-settings-screen"
-      className={cn(
-        "h-full relative",
-        shouldShowUpgradeBanner && "overflow-hidden",
-      )}
-    >
-      {shouldShowUpgradeBanner && (
-        <UpgradeBannerWithBackdrop
-          onUpgradeClick={() => {
-            createSubscriptionCheckoutSession();
-          }}
-          isDisabled={!isAuthed}
-        />
-      )}
+    <div data-testid="llm-settings-screen" className="h-full relative">
       <form
         action={formAction}
-        className={cn(
-          "flex flex-col h-full justify-between",
-          shouldShowUpgradeBanner && "h-[calc(100%-theme(spacing.12))]",
-        )}
-        inert={shouldShowUpgradeBanner}
+        className="flex flex-col h-full justify-between"
       >
         <div className="flex flex-col gap-6">
           <SettingsSwitch
@@ -482,7 +482,6 @@ function LlmSettingsScreen() {
             defaultIsToggled={view === "advanced"}
             onToggle={handleToggleAdvancedSettings}
             isToggled={view === "advanced"}
-            isDisabled={shouldShowUpgradeBanner}
           >
             {t(I18nKey.SETTINGS$ADVANCED)}
           </SettingsSwitch>
@@ -491,7 +490,6 @@ function LlmSettingsScreen() {
             <div
               data-testid="llm-settings-form-basic"
               className="flex flex-col gap-6"
-              aria-disabled={shouldShowUpgradeBanner ? "true" : undefined}
             >
               {!isLoading && !isFetching && (
                 <>
@@ -499,7 +497,7 @@ function LlmSettingsScreen() {
                     models={modelsAndProviders}
                     currentModel={settings.LLM_MODEL || DEFAULT_OPENHANDS_MODEL}
                     onChange={handleModelIsDirty}
-                    isDisabled={shouldShowUpgradeBanner}
+                    onDefaultValuesChanged={onDefaultValuesChanged}
                     wrapperClassName="!flex-col !gap-6"
                   />
                   {(settings.LLM_MODEL?.startsWith("openhands/") ||
@@ -509,28 +507,31 @@ function LlmSettingsScreen() {
                 </>
               )}
 
-              <SettingsInput
-                testId="llm-api-key-input"
-                name="llm-api-key-input"
-                label={t(I18nKey.SETTINGS_FORM$API_KEY)}
-                type="password"
-                className="w-full max-w-[680px]"
-                placeholder={settings.LLM_API_KEY_SET ? "<hidden>" : ""}
-                onChange={handleApiKeyIsDirty}
-                isDisabled={shouldShowUpgradeBanner}
-                startContent={
-                  settings.LLM_API_KEY_SET && (
-                    <KeyStatusIcon isSet={settings.LLM_API_KEY_SET} />
-                  )
-                }
-              />
+              {!shouldUseOpenHandsKey && (
+                <>
+                  <SettingsInput
+                    testId="llm-api-key-input"
+                    name="llm-api-key-input"
+                    label={t(I18nKey.SETTINGS_FORM$API_KEY)}
+                    type="password"
+                    className="w-full max-w-[680px]"
+                    placeholder={settings.LLM_API_KEY_SET ? "<hidden>" : ""}
+                    onChange={handleApiKeyIsDirty}
+                    startContent={
+                      settings.LLM_API_KEY_SET && (
+                        <KeyStatusIcon isSet={settings.LLM_API_KEY_SET} />
+                      )
+                    }
+                  />
 
-              <HelpLink
-                testId="llm-api-key-help-anchor"
-                text={t(I18nKey.SETTINGS$DONT_KNOW_API_KEY)}
-                linkText={t(I18nKey.SETTINGS$CLICK_FOR_INSTRUCTIONS)}
-                href="https://docs.all-hands.dev/usage/local-setup#getting-an-api-key"
-              />
+                  <HelpLink
+                    testId="llm-api-key-help-anchor"
+                    text={t(I18nKey.SETTINGS$DONT_KNOW_API_KEY)}
+                    linkText={t(I18nKey.SETTINGS$CLICK_FOR_INSTRUCTIONS)}
+                    href="https://docs.all-hands.dev/usage/local-setup#getting-an-api-key"
+                  />
+                </>
+              )}
             </div>
           )}
 
@@ -565,26 +566,30 @@ function LlmSettingsScreen() {
                 onChange={handleBaseUrlIsDirty}
               />
 
-              <SettingsInput
-                testId="llm-api-key-input"
-                name="llm-api-key-input"
-                label={t(I18nKey.SETTINGS_FORM$API_KEY)}
-                type="password"
-                className="w-full max-w-[680px]"
-                placeholder={settings.LLM_API_KEY_SET ? "<hidden>" : ""}
-                onChange={handleApiKeyIsDirty}
-                startContent={
-                  settings.LLM_API_KEY_SET && (
-                    <KeyStatusIcon isSet={settings.LLM_API_KEY_SET} />
-                  )
-                }
-              />
-              <HelpLink
-                testId="llm-api-key-help-anchor-advanced"
-                text={t(I18nKey.SETTINGS$DONT_KNOW_API_KEY)}
-                linkText={t(I18nKey.SETTINGS$CLICK_FOR_INSTRUCTIONS)}
-                href="https://docs.all-hands.dev/usage/local-setup#getting-an-api-key"
-              />
+              {!shouldUseOpenHandsKey && (
+                <>
+                  <SettingsInput
+                    testId="llm-api-key-input"
+                    name="llm-api-key-input"
+                    label={t(I18nKey.SETTINGS_FORM$API_KEY)}
+                    type="password"
+                    className="w-full max-w-[680px]"
+                    placeholder={settings.LLM_API_KEY_SET ? "<hidden>" : ""}
+                    onChange={handleApiKeyIsDirty}
+                    startContent={
+                      settings.LLM_API_KEY_SET && (
+                        <KeyStatusIcon isSet={settings.LLM_API_KEY_SET} />
+                      )
+                    }
+                  />
+                  <HelpLink
+                    testId="llm-api-key-help-anchor-advanced"
+                    text={t(I18nKey.SETTINGS$DONT_KNOW_API_KEY)}
+                    linkText={t(I18nKey.SETTINGS$CLICK_FOR_INSTRUCTIONS)}
+                    href="https://docs.all-hands.dev/usage/local-setup#getting-an-api-key"
+                  />
+                </>
+              )}
 
               {config?.APP_MODE !== "saas" && (
                 <>
@@ -597,7 +602,6 @@ function LlmSettingsScreen() {
                     defaultValue={settings.SEARCH_API_KEY || ""}
                     onChange={handleSearchApiKeyIsDirty}
                     placeholder={t(I18nKey.API$TVLY_KEY_EXAMPLE)}
-                    isDisabled={shouldShowUpgradeBanner}
                     startContent={
                       settings.SEARCH_API_KEY_SET && (
                         <KeyStatusIcon isSet={settings.SEARCH_API_KEY_SET} />
@@ -612,21 +616,23 @@ function LlmSettingsScreen() {
                     href="https://tavily.com/"
                   />
 
-                  <SettingsDropdownInput
-                    testId="agent-input"
-                    name="agent-input"
-                    label={t(I18nKey.SETTINGS$AGENT)}
-                    items={
-                      resources?.agents.map((agent) => ({
-                        key: agent,
-                        label: agent, // TODO: Add i18n support for agent names
-                      })) || []
-                    }
-                    defaultSelectedKey={settings.AGENT}
-                    isClearable={false}
-                    onInputChange={handleAgentIsDirty}
-                    wrapperClassName="w-full max-w-[680px]"
-                  />
+                  {!isV1Enabled && (
+                    <SettingsDropdownInput
+                      testId="agent-input"
+                      name="agent-input"
+                      label={t(I18nKey.SETTINGS$AGENT)}
+                      items={
+                        resources?.agents.map((agent) => ({
+                          key: agent,
+                          label: agent, // TODO: Add i18n support for agent names
+                        })) || []
+                      }
+                      defaultSelectedKey={settings.AGENT}
+                      isClearable={false}
+                      onInputChange={handleAgentIsDirty}
+                      wrapperClassName="w-full max-w-[680px]"
+                    />
+                  )}
                 </>
               )}
 
@@ -667,7 +673,6 @@ function LlmSettingsScreen() {
                   onToggle={handleConfirmationModeIsDirty}
                   defaultIsToggled={settings.CONFIRMATION_MODE}
                   isBeta
-                  isDisabled={shouldShowUpgradeBanner}
                 >
                   {t(I18nKey.SETTINGS$CONFIRMATION_MODE)}
                 </SettingsSwitch>

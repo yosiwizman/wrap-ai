@@ -4,10 +4,12 @@ import { devtools } from "zustand/middleware";
 export type ConversationTab =
   | "editor"
   | "browser"
-  | "jupyter"
   | "served"
   | "vscode"
-  | "terminal";
+  | "terminal"
+  | "planner";
+
+export type ConversationMode = "code" | "plan";
 
 export interface IMessageToSend {
   text: string;
@@ -26,6 +28,9 @@ interface ConversationState {
   submittedMessage: string | null;
   shouldHideSuggestions: boolean; // New state to hide suggestions when input expands
   hasRightPanelToggled: boolean;
+  planContent: string | null;
+  conversationMode: ConversationMode;
+  subConversationTaskId: string | null; // Task ID for sub-conversation creation
 }
 
 interface ConversationActions {
@@ -49,6 +54,9 @@ interface ConversationActions {
   setSubmittedMessage: (message: string | null) => void;
   resetConversationState: () => void;
   setHasRightPanelToggled: (hasRightPanelToggled: boolean) => void;
+  setConversationMode: (conversationMode: ConversationMode) => void;
+  setSubConversationTaskId: (taskId: string | null) => void;
+  setPlanContent: (planContent: string | null) => void;
 }
 
 type ConversationStore = ConversationState & ConversationActions;
@@ -74,6 +82,9 @@ export const useConversationStore = create<ConversationStore>()(
       submittedMessage: null,
       shouldHideSuggestions: false,
       hasRightPanelToggled: true,
+      planContent: null,
+      conversationMode: "code",
+      subConversationTaskId: null,
 
       // Actions
       setIsRightPanelShown: (isRightPanelShown) =>
@@ -205,10 +216,28 @@ export const useConversationStore = create<ConversationStore>()(
         set({ submittedMessage }, false, "setSubmittedMessage"),
 
       resetConversationState: () =>
-        set({ shouldHideSuggestions: false }, false, "resetConversationState"),
+        set(
+          {
+            shouldHideSuggestions: false,
+            conversationMode: "code",
+            subConversationTaskId: null,
+            planContent: null,
+          },
+          false,
+          "resetConversationState",
+        ),
 
       setHasRightPanelToggled: (hasRightPanelToggled) =>
         set({ hasRightPanelToggled }, false, "setHasRightPanelToggled"),
+
+      setConversationMode: (conversationMode) =>
+        set({ conversationMode }, false, "setConversationMode"),
+
+      setSubConversationTaskId: (subConversationTaskId) =>
+        set({ subConversationTaskId }, false, "setSubConversationTaskId"),
+
+      setPlanContent: (planContent) =>
+        set({ planContent }, false, "setPlanContent"),
     }),
     {
       name: "conversation-store",
