@@ -421,6 +421,92 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
             self.conversation_id, event_to_dict(user_msg_action)
         )
 
+    async def send_message_to_v1_conversation(self, jinja: Environment):
+        """Send a message to a v1 conversation using the agent server API."""
+        # Import services within the method to avoid circular imports
+        from openhands.agent_server.models import SendMessageRequest
+        from openhands.app_server.config import (
+            get_app_conversation_info_service,
+            get_httpx_client,
+            get_sandbox_service,
+        )
+        from openhands.app_server.services.injector import InjectorState
+        from openhands.app_server.user.specifiy_user_context import (
+            ADMIN,
+            USER_CONTEXT_ATTR,
+        )
+        from openhands.core.message import TextContent
+        from openhands.app_server.event_callback.util import (
+            ensure_conversation_found,
+            ensure_running_sandbox,
+            get_agent_server_url_from_sandbox,
+        )
+
+        # Create injector state for dependency injection
+        state = InjectorState()
+        setattr(state, USER_CONTEXT_ATTR, ADMIN)
+
+        async with (
+            get_app_conversation_info_service(state) as app_conversation_info_service,
+            get_sandbox_service(state) as sandbox_service,
+            get_httpx_client(state) as httpx_client,
+        ):
+            # 1. Conversation lookup
+            app_conversation_info = ensure_conversation_found(
+                await app_conversation_info_service.get_app_conversation_info(
+                    self.conversation_id
+                ),
+                self.conversation_id,
+            )
+
+            # 2. Sandbox lookup + validation
+            sandbox = ensure_running_sandbox(
+                await sandbox_service.get_sandbox(app_conversation_info.sandbox_id),
+                app_conversation_info.sandbox_id,
+            )
+
+            assert (
+                sandbox.session_api_key is not None
+            ), f'No session API key for sandbox: {sandbox.id}'
+
+            # 3. Get the agent server URL
+            agent_server_url = get_agent_server_url_from_sandbox(sandbox)
+
+            # 4. Prepare the message content
+            user_msg, _ = self._get_instructions(jinja)
+            
+            # 5. Create the message request
+            send_message_request = SendMessageRequest(
+                role='user', 
+                content=[TextContent(text=user_msg)]
+            )
+
+            # 6. Send the message to the agent server
+            url = (
+                f'{agent_server_url.rstrip("/")}'
+                f'/api/conversations/{self.conversation_id}/send_message'
+            )
+            headers = {'X-Session-API-Key': sandbox.session_api_key}
+            payload = send_message_request.model_dump()
+
+            try:
+                response = await httpx_client.post(
+                    url,
+                    json=payload,
+                    headers=headers,
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+
+            except Exception as e:
+                logger.error(
+                    '[Slack V1] Failed to send message to conversation %s: %s',
+                    self.conversation_id,
+                    str(e),
+                    exc_info=True,
+                )
+                raise Exception(f'Failed to send message to v1 conversation: {str(e)}')
+
     async def create_or_update_conversation(self, jinja: Environment) -> str:
         """Send new user message to converation"""
         user_info: SlackUser = self.slack_to_openhands_user
@@ -445,9 +531,9 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
 
 
         if conversation_metadata.conversation_version == 'v1':
-            pass
+            await self.send_message_to_v1_conversation(jinja)
         else:
-            self.send_message_to_v0_conversation(jinja)
+            await self.send_message_to_v0_conversation(jinja)
 
         return self.conversation_id
 
