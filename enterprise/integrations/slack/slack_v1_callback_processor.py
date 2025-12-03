@@ -68,18 +68,11 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
 
             # Only try to post error to Slack if we have basic requirements
             try:
-                # Check if we have bot token before posting
-                slack_team_store = SlackTeamStore.get_instance()
-                bot_access_token = slack_team_store.get_team_bot_token(
-                    self.slack_view_data.get('team_id', '')
+                await self._post_summary_to_slack(
+                    f'OpenHands encountered an error: **{str(e)}**.\n\n'
+                    f'[See the conversation]({get_conversation_url().format(conversation_id)})'
+                    'for more information.'
                 )
-
-                if bot_access_token:
-                    await self._post_summary_to_slack(
-                        f'OpenHands encountered an error: **{str(e)}**.\n\n'
-                        f'[See the conversation]({get_conversation_url().format(conversation_id)})'
-                        'for more information.'
-                    )
             except Exception as post_error:
                 _logger.warning(
                     '[Slack V1] Failed to post error message to Slack: %s', post_error
@@ -97,10 +90,18 @@ class SlackV1CallbackProcessor(EventCallbackProcessor):
     # Slack helpers
     # -------------------------------------------------------------------------
 
+
+    def _get_bot_access_token(self):
+        slack_team_store = SlackTeamStore.get_instance()
+        bot_access_token = slack_team_store.get_team_bot_token(
+            self.slack_view_data['team_id']
+        )
+
+        return bot_access_token
+
     async def _post_summary_to_slack(self, summary: str) -> None:
         """Post a summary message to the configured Slack channel."""
-        bot_access_token = self.slack_view_data.get('bot_access_token')
-
+        bot_access_token = self._get_bot_access_token()
         if not bot_access_token:
             raise RuntimeError('Missing Slack bot access token')
 

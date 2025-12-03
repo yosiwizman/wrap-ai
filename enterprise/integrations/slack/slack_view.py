@@ -208,9 +208,7 @@ class SlackNewConversationView(SlackViewInterface):
                 'thread_ts': self.thread_ts,
                 'team_id': self.team_id,
                 'slack_user_id': self.slack_user_id,
-            },
-            should_request_summary=True,
-            should_extract=self.should_extract,
+            }
         )
 
     async def create_or_update_conversation(self, jinja: Environment) -> str:
