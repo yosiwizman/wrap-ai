@@ -108,8 +108,14 @@ class TestSlackV1CallbackProcessor:
             # Wrong event types should be ignored
             (MessageAction(content='Hello world'), None),
             # Wrong state values should be ignored
-            (ConversationStateUpdateEvent(key='execution_status', value='running'), None),
-            (ConversationStateUpdateEvent(key='execution_status', value='started'), None),
+            (
+                ConversationStateUpdateEvent(key='execution_status', value='running'),
+                None,
+            ),
+            (
+                ConversationStateUpdateEvent(key='execution_status', value='started'),
+                None,
+            ),
             (ConversationStateUpdateEvent(key='other_key', value='finished'), None),
         ],
     )
@@ -289,9 +295,7 @@ class TestSlackV1CallbackProcessor:
         # Mock successful summary generation
         mock_request_summary.return_value = 'Test summary'
 
-        result = await slack_callback_processor(
-            uuid4(), event_callback, finish_event
-        )
+        result = await slack_callback_processor(uuid4(), event_callback, finish_event)
 
         assert result is not None
         assert result.status == EventCallbackResultStatus.ERROR
@@ -300,7 +304,10 @@ class TestSlackV1CallbackProcessor:
     @pytest.mark.parametrize(
         'slack_response,expected_error',
         [
-            ({'ok': False, 'error': 'channel_not_found'}, 'Slack API error: channel_not_found'),
+            (
+                {'ok': False, 'error': 'channel_not_found'},
+                'Slack API error: channel_not_found',
+            ),
             ({'ok': False, 'error': 'invalid_auth'}, 'Slack API error: invalid_auth'),
             ({'ok': False}, 'Slack API error: Unknown error'),
         ],
@@ -333,9 +340,7 @@ class TestSlackV1CallbackProcessor:
         mock_slack_client.chat_postMessage.return_value = slack_response
         mock_web_client.return_value = mock_slack_client
 
-        result = await slack_callback_processor(
-            uuid4(), event_callback, finish_event
-        )
+        result = await slack_callback_processor(uuid4(), event_callback, finish_event)
 
         assert result is not None
         assert result.status == EventCallbackResultStatus.ERROR
@@ -344,12 +349,17 @@ class TestSlackV1CallbackProcessor:
     @pytest.mark.parametrize(
         'exception,expected_error_fragment',
         [
-            (httpx.TimeoutException('Request timeout'), 'Request timeout after 30 seconds'),
+            (
+                httpx.TimeoutException('Request timeout'),
+                'Request timeout after 30 seconds',
+            ),
             (
                 httpx.HTTPStatusError(
                     'Server error',
                     request=MagicMock(),
-                    response=MagicMock(status_code=500, text='Internal Server Error', headers={}),
+                    response=MagicMock(
+                        status_code=500, text='Internal Server Error', headers={}
+                    ),
                 ),
                 'Failed to send message to agent server',
             ),
