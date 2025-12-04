@@ -451,31 +451,13 @@ class SlackUpdateExistingConversationView(SlackNewConversationView):
             get_sandbox_service(state) as sandbox_service,
             get_httpx_client(state) as httpx_client,
         ):
-            # 1. Conversation lookup with retry for timing issues
-            app_conversation_info = None
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    app_conversation_info = ensure_conversation_found(
-                        await app_conversation_info_service.get_app_conversation_info(
-                            self.conversation_id
-                        ),
-                        self.conversation_id,
-                    )
-                    break
-                except RuntimeError as e:
-                    if attempt == max_retries - 1:
-                        logger.error(
-                            f'[Slack V1] Failed to find conversation {self.conversation_id} after {max_retries} attempts: {e}'
-                        )
-                        raise
-                    else:
-                        logger.warning(
-                            f'[Slack V1] Conversation {self.conversation_id} not found on attempt {attempt + 1}, retrying...'
-                        )
-                        # Wait a bit before retrying
-                        import asyncio
-                        await asyncio.sleep(0.5)
+            # 1. Conversation lookup
+            app_conversation_info = ensure_conversation_found(
+                await app_conversation_info_service.get_app_conversation_info(
+                    self.conversation_id
+                ),
+                self.conversation_id,
+            )
 
             # 2. Sandbox lookup + validation
             sandbox = ensure_running_sandbox(
