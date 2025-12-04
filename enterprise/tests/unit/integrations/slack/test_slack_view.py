@@ -13,7 +13,7 @@ from integrations.slack.slack_view import (
     SlackNewConversationView,
     SlackUpdateExistingConversationView,
 )
-from jinja2 import Environment, DictLoader
+from jinja2 import DictLoader, Environment
 from storage.slack_conversation import SlackConversation
 from storage.slack_user import SlackUser
 
@@ -164,16 +164,18 @@ class TestV1V0DecisionLogic:
         """Test the decision logic for V1 vs V0 conversation creation based on user setting."""
         # Setup mocks
         mock_get_v1_setting.return_value = v1_enabled
-        
+
         if v1_creation_fails:
             mock_create_v1.side_effect = RuntimeError('V1 creation failed')
         else:
             mock_create_v1.return_value = None
-            
+
         mock_create_v0.return_value = None
 
         # Execute
-        result = await slack_new_conversation_view.create_or_update_conversation(mock_jinja_env)
+        result = await slack_new_conversation_view.create_or_update_conversation(
+            mock_jinja_env
+        )
 
         # Verify
         assert result == slack_new_conversation_view.conversation_id
@@ -198,8 +200,12 @@ class TestV1V0DecisionLogic:
 class TestMessageRouting:
     """Test that message sending routes to correct method based on conversation v1 flag."""
 
-    @patch.object(SlackUpdateExistingConversationView, 'send_message_to_v1_conversation')
-    @patch.object(SlackUpdateExistingConversationView, 'send_message_to_v0_conversation')
+    @patch.object(
+        SlackUpdateExistingConversationView, 'send_message_to_v1_conversation'
+    )
+    @patch.object(
+        SlackUpdateExistingConversationView, 'send_message_to_v0_conversation'
+    )
     async def test_message_routing_to_v1(
         self,
         mock_send_v0,
@@ -213,15 +219,21 @@ class TestMessageRouting:
         mock_send_v1.return_value = None
 
         # Execute
-        result = await slack_update_conversation_view_v1.create_or_update_conversation(mock_jinja_env)
+        result = await slack_update_conversation_view_v1.create_or_update_conversation(
+            mock_jinja_env
+        )
 
         # Verify
         assert result == slack_update_conversation_view_v1.conversation_id
         mock_send_v1.assert_called_once_with(mock_jinja_env)
         mock_send_v0.assert_not_called()
 
-    @patch.object(SlackUpdateExistingConversationView, 'send_message_to_v1_conversation')
-    @patch.object(SlackUpdateExistingConversationView, 'send_message_to_v0_conversation')
+    @patch.object(
+        SlackUpdateExistingConversationView, 'send_message_to_v1_conversation'
+    )
+    @patch.object(
+        SlackUpdateExistingConversationView, 'send_message_to_v0_conversation'
+    )
     async def test_message_routing_to_v0(
         self,
         mock_send_v0,
@@ -235,7 +247,9 @@ class TestMessageRouting:
         mock_send_v1.return_value = None
 
         # Execute
-        result = await slack_update_conversation_view_v0.create_or_update_conversation(mock_jinja_env)
+        result = await slack_update_conversation_view_v0.create_or_update_conversation(
+            mock_jinja_env
+        )
 
         # Verify
         assert result == slack_update_conversation_view_v0.conversation_id
@@ -271,40 +285,51 @@ class TestPausedSandboxResumption:
         """Test that paused sandboxes are resumed when sending messages to V1 conversations."""
         # Setup mocks
         mock_get_instructions.return_value = ('User message', '')
-        
+
         # Mock app conversation info service
         mock_app_info_service = AsyncMock()
         mock_app_info = MagicMock()
         mock_app_info.sandbox_id = 'sandbox-123'
         mock_app_info_service.get_app_conversation_info.return_value = mock_app_info
-        mock_get_app_info_service.return_value.__aenter__.return_value = mock_app_info_service
-        
+        mock_get_app_info_service.return_value.__aenter__.return_value = (
+            mock_app_info_service
+        )
+
         # Mock sandbox service with paused sandbox that gets resumed
         mock_sandbox_service = AsyncMock()
         mock_paused_sandbox = MagicMock()
         mock_paused_sandbox.status = SandboxStatus.PAUSED
         mock_paused_sandbox.session_api_key = 'test-api-key'
-        mock_paused_sandbox.exposed_urls = [MagicMock(name='AGENT_SERVER', url='http://localhost:8000')]
-        
+        mock_paused_sandbox.exposed_urls = [
+            MagicMock(name='AGENT_SERVER', url='http://localhost:8000')
+        ]
+
         # After resume, sandbox becomes running
         mock_running_sandbox = MagicMock()
         mock_running_sandbox.status = SandboxStatus.RUNNING
         mock_running_sandbox.session_api_key = 'test-api-key'
-        mock_running_sandbox.exposed_urls = [MagicMock(name='AGENT_SERVER', url='http://localhost:8000')]
-        
-        mock_sandbox_service.get_sandbox.side_effect = [mock_paused_sandbox, mock_running_sandbox]
+        mock_running_sandbox.exposed_urls = [
+            MagicMock(name='AGENT_SERVER', url='http://localhost:8000')
+        ]
+
+        mock_sandbox_service.get_sandbox.side_effect = [
+            mock_paused_sandbox,
+            mock_running_sandbox,
+        ]
         mock_sandbox_service.resume_sandbox = AsyncMock()
-        mock_get_sandbox_service.return_value.__aenter__.return_value = mock_sandbox_service
-        
+        mock_get_sandbox_service.return_value.__aenter__.return_value = (
+            mock_sandbox_service
+        )
+
         # Mock ensure_running_sandbox to first raise RuntimeError, then return running sandbox
         mock_ensure_running_sandbox.side_effect = [
             RuntimeError('Sandbox not running: sandbox-123'),
-            mock_running_sandbox
+            mock_running_sandbox,
         ]
-        
+
         # Mock agent server URL
         mock_get_agent_server_url.return_value = 'http://localhost:8000'
-        
+
         # Mock HTTP client
         mock_httpx_client = AsyncMock()
         mock_response = MagicMock()
@@ -313,7 +338,9 @@ class TestPausedSandboxResumption:
         mock_get_httpx_client.return_value.__aenter__.return_value = mock_httpx_client
 
         # Execute
-        await slack_update_conversation_view_v1.send_message_to_v1_conversation(mock_jinja_env)
+        await slack_update_conversation_view_v1.send_message_to_v1_conversation(
+            mock_jinja_env
+        )
 
         # Verify sandbox was resumed
         mock_sandbox_service.resume_sandbox.assert_called_once_with('sandbox-123')
