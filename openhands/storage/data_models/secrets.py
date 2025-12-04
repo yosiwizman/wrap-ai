@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from types import MappingProxyType
 from typing import Any
 
@@ -7,15 +8,14 @@ from pydantic import (
     Field,
     SerializationInfo,
     field_serializer,
+    field_validator,
     model_validator,
 )
 from pydantic.json import pydantic_encoder
 
 from openhands.integrations.provider import (
     CUSTOM_SECRETS_TYPE,
-    CUSTOM_SECRETS_TYPE_WITH_JSON_SCHEMA,
     PROVIDER_TOKEN_TYPE,
-    PROVIDER_TOKEN_TYPE_WITH_JSON_SCHEMA,
     CustomSecret,
     ProviderToken,
 )
@@ -23,11 +23,11 @@ from openhands.integrations.service_types import ProviderType
 
 
 class Secrets(BaseModel):
-    provider_tokens: PROVIDER_TOKEN_TYPE_WITH_JSON_SCHEMA = Field(
+    provider_tokens: PROVIDER_TOKEN_TYPE = Field(
         default_factory=lambda: MappingProxyType({})
     )
 
-    custom_secrets: CUSTOM_SECRETS_TYPE_WITH_JSON_SCHEMA = Field(
+    custom_secrets: CUSTOM_SECRETS_TYPE = Field(
         default_factory=lambda: MappingProxyType({})
     )
 
@@ -36,6 +36,11 @@ class Secrets(BaseModel):
         validate_assignment=True,
         arbitrary_types_allowed=True,
     )
+
+    @field_validator('provider_tokens', 'custom_secrets')
+    @classmethod
+    def immutable_validator(cls, value: Mapping) -> MappingProxyType:
+        return MappingProxyType(value)
 
     @field_serializer('provider_tokens')
     def provider_tokens_serializer(

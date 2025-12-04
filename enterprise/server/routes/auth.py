@@ -34,7 +34,6 @@ from openhands.server.shared import config
 from openhands.server.user_auth import get_access_token
 from openhands.server.user_auth.user_auth import get_user_auth
 from openhands.utils.async_utils import call_sync_from_async
-from openhands.utils.posthog_tracker import track_user_signup_completed
 
 with warnings.catch_warnings():
     warnings.simplefilter('ignore')
@@ -392,12 +391,7 @@ async def accept_tos(request: Request):
         session.commit()
 
     logger.info(f'User {user_id} accepted TOS')
-
-    # Track user signup completion in PostHog
-    track_user_signup_completed(
-        user_id=user_id,
         signup_timestamp=accepted_tos.isoformat(),
-    )
 
     response = JSONResponse(
         status_code=status.HTTP_200_OK, content={'redirect_url': redirect_url}
