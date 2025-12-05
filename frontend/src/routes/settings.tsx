@@ -35,7 +35,7 @@ export const clientLoader = async ({ request }: Route.ClientLoaderArgs) => {
   }
 
   // If LLM settings are hidden and user tries to access the LLM settings page
-  if (config?.FEATURE_FLAGS.HIDE_LLM_SETTINGS && pathname === "/settings") {
+  if (config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS && pathname === "/settings") {
     // Redirect to the first available settings page
     if (isSaas) {
       return redirect("/settings/user");
@@ -63,12 +63,12 @@ function SettingsScreen() {
     }
 
     // Filter out LLM settings if the feature flag is enabled
-    if (config?.FEATURE_FLAGS.HIDE_LLM_SETTINGS) {
+    if (config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS) {
       return items.filter((item) => item.to !== "/settings");
     }
 
     return items;
-  }, [isSaas, config?.FEATURE_FLAGS.HIDE_LLM_SETTINGS]);
+  }, [isSaas, config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS]);
 
   // Current section title for the main content area
   const currentSectionTitle = useMemo(() => {

@@ -28,7 +28,7 @@ export function AccountSettingsContextMenu({
 
   // Get navigation items and filter out LLM settings if the feature flag is enabled
   let items = isSaas ? SAAS_NAV_ITEMS : OSS_NAV_ITEMS;
-  if (config?.FEATURE_FLAGS.HIDE_LLM_SETTINGS) {
+  if (config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS) {
     items = items.filter((item) => item.to !== "/settings");
   }
 
