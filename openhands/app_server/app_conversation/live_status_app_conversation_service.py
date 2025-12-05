@@ -442,13 +442,51 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
                 result[stored_conversation.sandbox_id].append(stored_conversation.id)
         return result
 
+    async def _find_running_sandbox_for_user(self) -> SandboxInfo | None:
+        """Find a running sandbox for the current user.
+
+        Returns:
+            SandboxInfo if a running sandbox is found, None otherwise.
+        """
+        try:
+            user_id = await self.user_context.get_user_id()
+
+            # Search through all sandboxes to find running ones for this user
+            page_id = None
+            while True:
+                page = await self.sandbox_service.search_sandboxes(
+                    page_id=page_id, limit=100
+                )
+
+                for sandbox in page.items:
+                    if (
+                        sandbox.status == SandboxStatus.RUNNING
+                        and sandbox.created_by_user_id == user_id
+                    ):
+                        return sandbox
+
+                if page.next_page_id is None:
+                    break
+                page_id = page.next_page_id
+
+            return None
+        except Exception as e:
+            _logger.warning(
+                f'Error finding running sandbox for user: {e}', exc_info=True
+            )
+            return None
+
     async def _wait_for_sandbox_start(
         self, task: AppConversationStartTask
     ) -> AsyncGenerator[AppConversationStartTask, None]:
         """Wait for sandbox to start and return info."""
         # Get the sandbox
         if not task.request.sandbox_id:
-            sandbox = await self.sandbox_service.start_sandbox()
+            # First try to find a running sandbox for the current user
+            sandbox = await self._find_running_sandbox_for_user()
+            if sandbox is None:
+                # No running sandbox found, start a new one
+                sandbox = await self.sandbox_service.start_sandbox()
             task.sandbox_id = sandbox.id
         else:
             sandbox_info = await self.sandbox_service.get_sandbox(
