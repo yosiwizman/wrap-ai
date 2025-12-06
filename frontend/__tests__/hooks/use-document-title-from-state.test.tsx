@@ -2,11 +2,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { useDocumentTitleFromState } from "#/hooks/use-document-title-from-state";
 import { useActiveConversation } from "#/hooks/query/use-active-conversation";
+import { useAppTitle } from "#/hooks/use-app-title";
 
-// Mock the useActiveConversation hook
+// Mock the hooks
 vi.mock("#/hooks/query/use-active-conversation");
+vi.mock("#/hooks/use-app-title");
 
 const mockUseActiveConversation = vi.mocked(useActiveConversation);
+const mockUseAppTitle = vi.mocked(useAppTitle);
 
 describe("useDocumentTitleFromState", () => {
   const originalTitle = document.title;
@@ -14,6 +17,8 @@ describe("useDocumentTitleFromState", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     document.title = "Test";
+    // Default to OSS mode (OpenHands) unless overridden in specific tests
+    mockUseAppTitle.mockReturnValue("OpenHands");
   });
 
   afterEach(() => {
@@ -131,5 +136,46 @@ describe("useDocumentTitleFromState", () => {
     unmount();
 
     expect(document.title).toBe("OpenHands");
+  });
+
+  it("should use 'OpenHands Cloud' suffix in SaaS mode", () => {
+    mockUseAppTitle.mockReturnValue("OpenHands Cloud");
+    mockUseActiveConversation.mockReturnValue({
+      data: null,
+    } as any);
+
+    renderHook(() => useDocumentTitleFromState());
+
+    expect(document.title).toBe("OpenHands Cloud");
+  });
+
+  it("should use 'OpenHands Cloud' with conversation title in SaaS mode", () => {
+    mockUseAppTitle.mockReturnValue("OpenHands Cloud");
+    mockUseActiveConversation.mockReturnValue({
+      data: {
+        conversation_id: "123",
+        title: "My Conversation",
+        status: "RUNNING",
+      },
+    } as any);
+
+    renderHook(() => useDocumentTitleFromState());
+
+    expect(document.title).toBe("My Conversation | OpenHands Cloud");
+  });
+
+  it("should allow suffix override even in SaaS mode", () => {
+    mockUseAppTitle.mockReturnValue("OpenHands Cloud");
+    mockUseActiveConversation.mockReturnValue({
+      data: {
+        conversation_id: "123",
+        title: "My Conversation",
+        status: "RUNNING",
+      },
+    } as any);
+
+    renderHook(() => useDocumentTitleFromState("Custom Title"));
+
+    expect(document.title).toBe("My Conversation | Custom Title");
   });
 });

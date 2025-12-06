@@ -30,6 +30,7 @@ import { LOCAL_STORAGE_KEYS } from "#/utils/local-storage";
 import { EmailVerificationGuard } from "#/components/features/guards/email-verification-guard";
 import { MaintenanceBanner } from "#/components/features/maintenance/maintenance-banner";
 import { cn, isMobileDevice } from "#/utils/utils";
+import { useAppTitle } from "#/hooks/use-app-title";
 
 export function ErrorBoundary() {
   const error = useRouteError();
@@ -79,6 +80,16 @@ export default function MainApp() {
     isFetching: isFetchingAuth,
     isError: isAuthError,
   } = useIsAuthed();
+
+  // Set the document title based on APP_MODE
+  const appTitle = useAppTitle();
+  React.useEffect(() => {
+    // Only set the base title if we're not on a conversation page
+    // (conversation pages handle their own titles via useDocumentTitleFromState)
+    if (!pathname.includes("/conversations/")) {
+      document.title = appTitle;
+    }
+  }, [appTitle, pathname]);
 
   // Always call the hook, but we'll only use the result when not on TOS page
   const gitHubAuthUrl = useGitHubAuthUrl({
