@@ -3,7 +3,6 @@ import { renderHook } from "@testing-library/react";
 import { useAppTitle } from "#/hooks/use-app-title";
 import { useConfig } from "#/hooks/query/use-config";
 
-// Mock the useConfig hook
 vi.mock("#/hooks/query/use-config");
 
 const mockUseConfig = vi.mocked(useConfig);
@@ -13,40 +12,25 @@ describe("useAppTitle", () => {
     vi.clearAllMocks();
   });
 
-  it("should return 'OpenHands' for OSS mode", () => {
-    mockUseConfig.mockReturnValue({
-      data: { APP_MODE: "oss" },
-    } as any);
+  it.each([
+    ["saas", "OpenHands Cloud"],
+    ["oss", "OpenHands"],
+    [undefined, "OpenHands"],
+  ])(
+    "should return '%s' when APP_MODE is '%s'",
+    (appMode, expectedTitle) => {
+      mockUseConfig.mockReturnValue({
+        data: { APP_MODE: appMode },
+      } as any);
 
-    const { result } = renderHook(() => useAppTitle());
+      const { result } = renderHook(() => useAppTitle());
 
-    expect(result.current).toBe("OpenHands");
-  });
-
-  it("should return 'OpenHands Cloud' for SaaS mode", () => {
-    mockUseConfig.mockReturnValue({
-      data: { APP_MODE: "saas" },
-    } as any);
-
-    const { result } = renderHook(() => useAppTitle());
-
-    expect(result.current).toBe("OpenHands Cloud");
-  });
-
-  it("should return 'OpenHands' when APP_MODE is undefined", () => {
-    mockUseConfig.mockReturnValue({
-      data: { APP_MODE: undefined },
-    } as any);
-
-    const { result } = renderHook(() => useAppTitle());
-
-    expect(result.current).toBe("OpenHands");
-  });
+      expect(result.current).toBe(expectedTitle);
+    },
+  );
 
   it("should return 'OpenHands' when config data is null", () => {
-    mockUseConfig.mockReturnValue({
-      data: null,
-    } as any);
+    mockUseConfig.mockReturnValue({ data: null } as any);
 
     const { result } = renderHook(() => useAppTitle());
 

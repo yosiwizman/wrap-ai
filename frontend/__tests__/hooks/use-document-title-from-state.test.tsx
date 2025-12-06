@@ -138,31 +138,25 @@ describe("useDocumentTitleFromState", () => {
     expect(document.title).toBe("OpenHands");
   });
 
-  it("should use 'OpenHands Cloud' suffix in SaaS mode", () => {
-    mockUseAppTitle.mockReturnValue("OpenHands Cloud");
-    mockUseActiveConversation.mockReturnValue({
-      data: null,
-    } as any);
+  it.each([
+    [null, "OpenHands Cloud"],
+    [
+      { conversation_id: "123", title: "My Conversation", status: "RUNNING" },
+      "My Conversation | OpenHands Cloud",
+    ],
+  ])(
+    "should use 'OpenHands Cloud' suffix in SaaS mode",
+    (conversationData, expectedTitle) => {
+      mockUseAppTitle.mockReturnValue("OpenHands Cloud");
+      mockUseActiveConversation.mockReturnValue({
+        data: conversationData,
+      } as any);
 
-    renderHook(() => useDocumentTitleFromState());
+      renderHook(() => useDocumentTitleFromState());
 
-    expect(document.title).toBe("OpenHands Cloud");
-  });
-
-  it("should use 'OpenHands Cloud' with conversation title in SaaS mode", () => {
-    mockUseAppTitle.mockReturnValue("OpenHands Cloud");
-    mockUseActiveConversation.mockReturnValue({
-      data: {
-        conversation_id: "123",
-        title: "My Conversation",
-        status: "RUNNING",
-      },
-    } as any);
-
-    renderHook(() => useDocumentTitleFromState());
-
-    expect(document.title).toBe("My Conversation | OpenHands Cloud");
-  });
+      expect(document.title).toBe(expectedTitle);
+    },
+  );
 
   it("should allow suffix override even in SaaS mode", () => {
     mockUseAppTitle.mockReturnValue("OpenHands Cloud");
