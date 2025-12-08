@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { renderHook, waitFor, cleanup } from "@testing-library/react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { ws } from "msw";
 import { server } from "#/mocks/node";
@@ -28,6 +28,12 @@ describe("useWebSocket", () => {
   // This is critical because wsLink.broadcast() sends to ALL clients in wsLink.clients,
   // which can include stale connections from previous tests if not properly cleaned up
   afterEach(() => {
+    // First, unmount any rendered hooks to trigger their cleanup effects
+    // This ensures the hook's internal WebSocket close happens before we clean up MSW clients
+    cleanup();
+
+    // Then close any remaining MSW WebSocket clients
+    // This handles edge cases where connections weren't properly closed by the hook
     wsLink.clients.forEach((client) => {
       client.close();
     });
