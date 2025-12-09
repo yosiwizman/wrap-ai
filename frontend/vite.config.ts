@@ -111,6 +111,8 @@ export default defineConfig(({ mode }) => {
       environment: "jsdom",
       setupFiles: ["vitest.setup.ts"],
       exclude: [...configDefaults.exclude, "tests"],
+      // Run WebSocket tests in separate processes for better isolation
+      poolMatchGlobs: [["**/__tests__/hooks/use-websocket.test.ts", "forks"]],
       coverage: {
         reporter: ["text", "json", "html", "lcov", "text-summary"],
         reportsDirectory: "coverage",

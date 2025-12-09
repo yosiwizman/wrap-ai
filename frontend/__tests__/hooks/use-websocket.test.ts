@@ -1,7 +1,3 @@
-/**
- * @vitest-environment jsdom
- * @vitest-pool forks
- */
 import { renderHook, waitFor, cleanup } from "@testing-library/react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { ws } from "msw";
