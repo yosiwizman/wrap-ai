@@ -8,16 +8,15 @@ describe.sequential("useWebSocket", () => {
   // MSW WebSocket mock setup - using global server from vitest.setup.ts
   const wsLink = ws.link("ws://acme.com/ws");
 
-  // Store reference to current test's client to avoid using broadcast()
-  // broadcast() sends to ALL clients which causes cross-test contamination
+  // Map to store client references by URL to avoid cross-test contamination
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let currentClient: any = null;
+  const clientsByUrl = new Map<string, any>();
 
   const wsHandler = wsLink.addEventListener(
     "connection",
     ({ client, server: wsServer }) => {
-      // Store reference to this connection's client
-      currentClient = client;
+      // Store client by URL for test isolation
+      clientsByUrl.set(client.url.toString(), client);
 
       // Establish the connection
       wsServer.connect();
@@ -28,7 +27,7 @@ describe.sequential("useWebSocket", () => {
   );
 
   beforeEach(() => {
-    currentClient = null;
+    clientsByUrl.clear();
     server.use(wsHandler);
   });
 
@@ -66,7 +65,8 @@ describe.sequential("useWebSocket", () => {
   });
 
   it("should handle incoming messages correctly", async () => {
-    const { result } = renderHook(() => useWebSocket("ws://acme.com/ws"));
+    const testUrl = "ws://acme.com/ws";
+    const { result } = renderHook(() => useWebSocket(testUrl));
 
     // Wait for connection to be established
     await waitFor(() => {
@@ -78,14 +78,12 @@ describe.sequential("useWebSocket", () => {
       expect(result.current.lastMessage).toBe("Welcome to the WebSocket!");
     });
 
-    // Ensure currentClient is set before sending (race condition guard)
-    await waitFor(() => {
-      expect(currentClient).not.toBe(null);
-    });
+    // Get the client for THIS test's connection
+    const client = clientsByUrl.get(testUrl);
+    expect(client).not.toBe(undefined);
 
-    // Send another message from the mock server using direct client reference
-    // (avoids broadcast which sends to ALL clients causing cross-test contamination)
-    currentClient.send("Hello from server!");
+    // Send another message from the mock server
+    client.send("Hello from server!");
 
     await waitFor(() => {
       expect(result.current.lastMessage).toBe("Hello from server!");
@@ -226,12 +224,11 @@ describe.sequential("useWebSocket", () => {
   });
 
   it("should call onMessage handler when WebSocket receives a message", async () => {
+    const testUrl = "ws://acme.com/ws";
     const onMessageSpy = vi.fn();
     const options = { onMessage: onMessageSpy };
 
-    const { result } = renderHook(() =>
-      useWebSocket("ws://acme.com/ws", options),
-    );
+    const { result } = renderHook(() => useWebSocket(testUrl, options));
 
     // Wait for connection and socket to be fully established
     await waitFor(() => {
@@ -248,14 +245,12 @@ describe.sequential("useWebSocket", () => {
     // onMessage handler should have been called for the welcome message
     expect(onMessageSpy).toHaveBeenCalledOnce();
 
-    // Ensure currentClient is set before sending (race condition guard)
-    await waitFor(() => {
-      expect(currentClient).not.toBe(null);
-    });
+    // Get the client for THIS test's connection
+    const client = clientsByUrl.get(testUrl);
+    expect(client).not.toBe(undefined);
 
-    // Send another message from the mock server using direct client reference
-    // (avoids broadcast which sends to ALL clients causing cross-test contamination)
-    currentClient.send("Hello from server!");
+    // Send another message from the mock server
+    client.send("Hello from server!");
 
     await waitFor(() => {
       expect(result.current.lastMessage).toBe("Hello from server!");
