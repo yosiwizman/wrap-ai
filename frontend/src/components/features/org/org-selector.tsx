@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import React from "react";
 import { SettingsDropdownInput } from "../settings/settings-dropdown-input";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { useOrganizations } from "#/hooks/query/use-organizations";
@@ -7,7 +7,7 @@ export function OrgSelector() {
   const { orgId, setOrgId } = useSelectedOrganizationId();
   const { data: organizations, isLoading } = useOrganizations();
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (!orgId && organizations?.length) {
       setOrgId(organizations[0].id);
     }
