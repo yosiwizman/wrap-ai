@@ -38,7 +38,7 @@ export interface OpenHandsActionEvent<
 }
 
 export interface OpenHandsObservationEvent<
-  T extends OpenHandsEventType
+  T extends OpenHandsEventType,
 > extends OpenHandsBaseEvent {
   cause: number;
   observation: T;

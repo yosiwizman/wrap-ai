@@ -3,7 +3,7 @@ import {
   CmdOutputMetadata,
   TaskItem,
   TextContent,
-  ImageContent
+  ImageContent,
 } from "./common";
 
 export interface MCPToolObservation extends ObservationBase<"MCPToolObservation"> {
