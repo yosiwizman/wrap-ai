@@ -8,6 +8,7 @@ import CloseIcon from "#/icons/close.svg?react";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { useMe } from "#/hooks/query/use-me";
 import { useOrganizations } from "#/hooks/query/use-organizations";
+import { useConfig } from "#/hooks/query/use-config";
 import { OrgSelector } from "../org/org-selector";
 
 interface NavigationItem {
@@ -30,6 +31,7 @@ export function SettingsNavigation({
   const { orgId } = useSelectedOrganizationId();
   const { data: me } = useMe();
   const { data: organizations } = useOrganizations();
+  const { data: config } = useConfig();
 
   const { t } = useTranslation();
 
@@ -89,6 +91,7 @@ export function SettingsNavigation({
                 "/settings/organization-members": canViewOrgRoutes,
                 "/settings/org": canViewOrgRoutes,
                 "/settings/billing": !isTeamOrg,
+                "/settings": !config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS,
               };
               return routeVisibility[navItem.to] ?? true;
             })
