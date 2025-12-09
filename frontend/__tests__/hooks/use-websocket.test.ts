@@ -134,15 +134,14 @@ describe.sequential("useWebSocket", () => {
       useWebSocket("ws://acme.com/ws"),
     );
 
-    // Wait for connection to be established
+    // Wait for connection and socket to be fully established before spying
     await waitFor(() => {
       expect(result.current.isConnected).toBe(true);
+      expect(result.current.socket).toBeTruthy();
+      expect(result.current.socket?.readyState).toBe(WebSocket.OPEN);
     });
 
-    // Verify connection is active
-    expect(result.current.isConnected).toBe(true);
-    expect(result.current.socket).toBeTruthy();
-
+    // Now safe to spy on the socket
     const closeSpy = vi.spyOn(result.current.socket!, "close");
 
     // Unmount the component (this should trigger the useEffect cleanup)
@@ -203,9 +202,11 @@ describe.sequential("useWebSocket", () => {
       useWebSocket("ws://acme.com/ws", options),
     );
 
-    // Wait for connection to be established
+    // Wait for connection and socket to be fully established
     await waitFor(() => {
       expect(result.current.isConnected).toBe(true);
+      expect(result.current.socket).toBeTruthy();
+      expect(result.current.socket?.readyState).toBe(WebSocket.OPEN);
     });
 
     expect(onCloseSpy).not.toHaveBeenCalled();
@@ -227,9 +228,11 @@ describe.sequential("useWebSocket", () => {
       useWebSocket("ws://acme.com/ws", options),
     );
 
-    // Wait for connection to be established
+    // Wait for connection and socket to be fully established
     await waitFor(() => {
       expect(result.current.isConnected).toBe(true);
+      expect(result.current.socket).toBeTruthy();
+      expect(result.current.socket?.readyState).toBe(WebSocket.OPEN);
     });
 
     // Should receive the welcome message from our mock
@@ -290,16 +293,18 @@ describe.sequential("useWebSocket", () => {
   it("should provide sendMessage function to send messages to WebSocket", async () => {
     const { result } = renderHook(() => useWebSocket("ws://acme.com/ws"));
 
-    // Wait for connection to be established
+    // Wait for connection and socket to be fully established before spying
     await waitFor(() => {
       expect(result.current.isConnected).toBe(true);
+      expect(result.current.socket).toBeTruthy();
+      expect(result.current.socket?.readyState).toBe(WebSocket.OPEN);
     });
 
     // Should have a sendMessage function
     expect(result.current.sendMessage).toBeDefined();
     expect(typeof result.current.sendMessage).toBe("function");
 
-    // Mock the WebSocket send method
+    // Now safe to spy on the socket
     const sendSpy = vi.spyOn(result.current.socket!, "send");
 
     // Send a message
