@@ -8,9 +8,17 @@ describe.sequential("useWebSocket", () => {
   // MSW WebSocket mock setup - using global server from vitest.setup.ts
   const wsLink = ws.link("ws://acme.com/ws");
 
+  // Store reference to current test's client to avoid using broadcast()
+  // broadcast() sends to ALL clients which causes cross-test contamination
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let currentClient: any = null;
+
   const wsHandler = wsLink.addEventListener(
     "connection",
     ({ client, server: wsServer }) => {
+      // Store reference to this connection's client
+      currentClient = client;
+
       // Establish the connection
       wsServer.connect();
 
@@ -20,6 +28,7 @@ describe.sequential("useWebSocket", () => {
   );
 
   beforeEach(() => {
+    currentClient = null;
     server.use(wsHandler);
   });
 
@@ -65,8 +74,9 @@ describe.sequential("useWebSocket", () => {
       expect(result.current.lastMessage).toBe("Welcome to the WebSocket!");
     });
 
-    // Send another message from the mock server
-    wsLink.broadcast("Hello from server!");
+    // Send another message from the mock server using direct client reference
+    // (avoids broadcast which sends to ALL clients causing cross-test contamination)
+    currentClient.send("Hello from server!");
 
     await waitFor(() => {
       expect(result.current.lastMessage).toBe("Hello from server!");
@@ -226,8 +236,9 @@ describe.sequential("useWebSocket", () => {
     // onMessage handler should have been called for the welcome message
     expect(onMessageSpy).toHaveBeenCalledOnce();
 
-    // Send another message from the mock server
-    wsLink.broadcast("Hello from server!");
+    // Send another message from the mock server using direct client reference
+    // (avoids broadcast which sends to ALL clients causing cross-test contamination)
+    currentClient.send("Hello from server!");
 
     await waitFor(() => {
       expect(result.current.lastMessage).toBe("Hello from server!");
