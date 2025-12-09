@@ -102,6 +102,7 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
     sandbox_startup_poll_frequency: int
     httpx_client: httpx.AsyncClient
     web_url: str | None
+    openhands_provider_base_url: str | None
     access_token_hard_timeout: timedelta | None
     app_mode: str | None = None
     keycloak_auth_cookie: str | None = None
@@ -564,13 +565,10 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         if not request.llm_model and parent_info.llm_model:
             request.llm_model = parent_info.llm_model
 
-    async def _setup_secrets_for_git_provider(
-        self, git_provider: ProviderType | None, user: UserInfo
-    ) -> dict:
-        """Set up secrets for git provider authentication.
+    async def _setup_secrets_for_git_providers(self, user: UserInfo) -> dict:
+        """Set up secrets for all git provider authentication.
 
         Args:
-            git_provider: The git provider type (GitHub, GitLab, etc.)
             user: User information containing authentication details
 
         Returns:
@@ -578,35 +576,42 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         """
         secrets = await self.user_context.get_secrets()
 
-        if not git_provider:
+        # Get all provider tokens from user authentication
+        provider_tokens = await self.user_context.get_provider_tokens()
+        if not provider_tokens:
             return secrets
 
-        secret_name = f'{git_provider.name}_TOKEN'
+        # Create secrets for each provider token
+        for provider_type, provider_token in provider_tokens.items():
+            if not provider_token.token:
+                continue
 
-        if self.web_url:
-            # Create an access token for web-based authentication
-            access_token = self.jwt_service.create_jws_token(
-                payload={
-                    'user_id': user.id,
-                    'provider_type': git_provider.value,
-                },
-                expires_in=self.access_token_hard_timeout,
-            )
-            headers = {'X-Access-Token': access_token}
+            secret_name = f'{provider_type.name}_TOKEN'
 
-            # Include keycloak_auth cookie in headers if app_mode is SaaS
-            if self.app_mode == 'saas' and self.keycloak_auth_cookie:
-                headers['Cookie'] = f'keycloak_auth={self.keycloak_auth_cookie}'
+            if self.web_url:
+                # Create an access token for web-based authentication
+                access_token = self.jwt_service.create_jws_token(
+                    payload={
+                        'user_id': user.id,
+                        'provider_type': provider_type.value,
+                    },
+                    expires_in=self.access_token_hard_timeout,
+                )
+                headers = {'X-Access-Token': access_token}
 
-            secrets[secret_name] = LookupSecret(
-                url=self.web_url + '/api/v1/webhooks/secrets',
-                headers=headers,
-            )
-        else:
-            # Use static token for environments without web URL access
-            static_token = await self.user_context.get_latest_token(git_provider)
-            if static_token:
-                secrets[secret_name] = StaticSecret(value=static_token)
+                # Include keycloak_auth cookie in headers if app_mode is SaaS
+                if self.app_mode == 'saas' and self.keycloak_auth_cookie:
+                    headers['Cookie'] = f'keycloak_auth={self.keycloak_auth_cookie}'
+
+                secrets[secret_name] = LookupSecret(
+                    url=self.web_url + '/api/v1/webhooks/secrets',
+                    headers=headers,
+                )
+            else:
+                # Use static token for environments without web URL access
+                static_token = await self.user_context.get_latest_token(provider_type)
+                if static_token:
+                    secrets[secret_name] = StaticSecret(value=static_token)
 
         return secrets
 
@@ -624,9 +629,12 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         """
         # Configure LLM
         model = llm_model or user.llm_model
+        base_url = user.llm_base_url
+        if model and model.startswith('openhands/'):
+            base_url = user.llm_base_url or self.openhands_provider_base_url
         llm = LLM(
             model=model,
-            base_url=user.llm_base_url,
+            base_url=base_url,
             api_key=user.llm_api_key,
             usage_id='agent',
         )
@@ -806,8 +814,8 @@ class LiveStatusAppConversationService(AppConversationServiceBase):
         user = await self.user_context.get_user_info()
         workspace = LocalWorkspace(working_dir=working_dir)
 
-        # Set up secrets for git provider
-        secrets = await self._setup_secrets_for_git_provider(git_provider, user)
+        # Set up secrets for all git providers
+        secrets = await self._setup_secrets_for_git_providers(user)
 
         # Configure LLM and MCP
         llm, mcp_config = await self._configure_llm_and_mcp(user, llm_model)
@@ -1116,6 +1124,7 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
                 sandbox_startup_poll_frequency=self.sandbox_startup_poll_frequency,
                 httpx_client=httpx_client,
                 web_url=web_url,
+                openhands_provider_base_url=config.openhands_provider_base_url,
                 access_token_hard_timeout=access_token_hard_timeout,
                 app_mode=app_mode,
                 keycloak_auth_cookie=keycloak_auth_cookie,

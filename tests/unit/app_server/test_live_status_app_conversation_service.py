@@ -32,6 +32,8 @@ class TestLiveStatusAppConversationService:
         """Set up test fixtures."""
         # Create mock dependencies
         self.mock_user_context = Mock(spec=UserContext)
+        self.mock_user_auth = Mock()
+        self.mock_user_context.user_auth = self.mock_user_auth
         self.mock_jwt_service = Mock()
         self.mock_sandbox_service = Mock()
         self.mock_sandbox_spec_service = Mock()
@@ -54,6 +56,7 @@ class TestLiveStatusAppConversationService:
             sandbox_startup_poll_frequency=1,
             httpx_client=self.mock_httpx_client,
             web_url='https://test.example.com',
+            openhands_provider_base_url='https://provider.example.com',
             access_token_hard_timeout=None,
             app_mode='test',
             keycloak_auth_cookie=None,
@@ -68,6 +71,7 @@ class TestLiveStatusAppConversationService:
         self.mock_user.confirmation_mode = False
         self.mock_user.search_api_key = None  # Default to None
         self.mock_user.condenser_max_size = None  # Default to None
+        self.mock_user.llm_base_url = 'https://api.openai.com/v1'
 
         # Mock sandbox
         self.mock_sandbox = Mock(spec=SandboxInfo)
@@ -75,67 +79,83 @@ class TestLiveStatusAppConversationService:
         self.mock_sandbox.status = SandboxStatus.RUNNING
 
     @pytest.mark.asyncio
-    async def test_setup_secrets_for_git_provider_no_provider(self):
-        """Test _setup_secrets_for_git_provider with no git provider."""
+    async def test_setup_secrets_for_git_providers_no_provider_tokens(self):
+        """Test _setup_secrets_for_git_providers with no provider tokens."""
         # Arrange
         base_secrets = {'existing': 'secret'}
         self.mock_user_context.get_secrets.return_value = base_secrets
+        self.mock_user_context.get_provider_tokens = AsyncMock(return_value=None)
 
         # Act
-        result = await self.service._setup_secrets_for_git_provider(
-            None, self.mock_user
-        )
+        result = await self.service._setup_secrets_for_git_providers(self.mock_user)
 
         # Assert
         assert result == base_secrets
         self.mock_user_context.get_secrets.assert_called_once()
+        self.mock_user_context.get_provider_tokens.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_setup_secrets_for_git_provider_with_web_url(self):
-        """Test _setup_secrets_for_git_provider with web URL (creates access token)."""
+    async def test_setup_secrets_for_git_providers_with_web_url(self):
+        """Test _setup_secrets_for_git_providers with web URL (creates access token)."""
         # Arrange
+        from pydantic import SecretStr
+
+        from openhands.integrations.provider import ProviderToken
+
         base_secrets = {}
         self.mock_user_context.get_secrets.return_value = base_secrets
         self.mock_jwt_service.create_jws_token.return_value = 'test_access_token'
-        git_provider = ProviderType.GITHUB
+
+        # Mock provider tokens
+        provider_tokens = {
+            ProviderType.GITHUB: ProviderToken(token=SecretStr('github_token')),
+            ProviderType.GITLAB: ProviderToken(token=SecretStr('gitlab_token')),
+        }
+        self.mock_user_context.get_provider_tokens = AsyncMock(
+            return_value=provider_tokens
+        )
 
         # Act
-        result = await self.service._setup_secrets_for_git_provider(
-            git_provider, self.mock_user
-        )
+        result = await self.service._setup_secrets_for_git_providers(self.mock_user)
 
         # Assert
         assert 'GITHUB_TOKEN' in result
+        assert 'GITLAB_TOKEN' in result
         assert isinstance(result['GITHUB_TOKEN'], LookupSecret)
+        assert isinstance(result['GITLAB_TOKEN'], LookupSecret)
         assert (
             result['GITHUB_TOKEN'].url
             == 'https://test.example.com/api/v1/webhooks/secrets'
         )
         assert result['GITHUB_TOKEN'].headers['X-Access-Token'] == 'test_access_token'
 
-        self.mock_jwt_service.create_jws_token.assert_called_once_with(
-            payload={
-                'user_id': self.mock_user.id,
-                'provider_type': git_provider.value,
-            },
-            expires_in=None,
-        )
+        # Should be called twice, once for each provider
+        assert self.mock_jwt_service.create_jws_token.call_count == 2
 
     @pytest.mark.asyncio
-    async def test_setup_secrets_for_git_provider_with_saas_mode(self):
-        """Test _setup_secrets_for_git_provider with SaaS mode (includes keycloak cookie)."""
+    async def test_setup_secrets_for_git_providers_with_saas_mode(self):
+        """Test _setup_secrets_for_git_providers with SaaS mode (includes keycloak cookie)."""
         # Arrange
+        from pydantic import SecretStr
+
+        from openhands.integrations.provider import ProviderToken
+
         self.service.app_mode = 'saas'
         self.service.keycloak_auth_cookie = 'test_cookie'
         base_secrets = {}
         self.mock_user_context.get_secrets.return_value = base_secrets
         self.mock_jwt_service.create_jws_token.return_value = 'test_access_token'
-        git_provider = ProviderType.GITLAB
+
+        # Mock provider tokens
+        provider_tokens = {
+            ProviderType.GITLAB: ProviderToken(token=SecretStr('gitlab_token')),
+        }
+        self.mock_user_context.get_provider_tokens = AsyncMock(
+            return_value=provider_tokens
+        )
 
         # Act
-        result = await self.service._setup_secrets_for_git_provider(
-            git_provider, self.mock_user
-        )
+        result = await self.service._setup_secrets_for_git_providers(self.mock_user)
 
         # Assert
         assert 'GITLAB_TOKEN' in result
@@ -145,40 +165,60 @@ class TestLiveStatusAppConversationService:
         assert lookup_secret.headers['Cookie'] == 'keycloak_auth=test_cookie'
 
     @pytest.mark.asyncio
-    async def test_setup_secrets_for_git_provider_without_web_url(self):
-        """Test _setup_secrets_for_git_provider without web URL (uses static token)."""
+    async def test_setup_secrets_for_git_providers_without_web_url(self):
+        """Test _setup_secrets_for_git_providers without web URL (uses static token)."""
         # Arrange
+        from pydantic import SecretStr
+
+        from openhands.integrations.provider import ProviderToken
+
         self.service.web_url = None
         base_secrets = {}
         self.mock_user_context.get_secrets.return_value = base_secrets
         self.mock_user_context.get_latest_token.return_value = 'static_token_value'
-        git_provider = ProviderType.GITHUB
+
+        # Mock provider tokens
+        provider_tokens = {
+            ProviderType.GITHUB: ProviderToken(token=SecretStr('github_token')),
+        }
+        self.mock_user_context.get_provider_tokens = AsyncMock(
+            return_value=provider_tokens
+        )
 
         # Act
-        result = await self.service._setup_secrets_for_git_provider(
-            git_provider, self.mock_user
-        )
+        result = await self.service._setup_secrets_for_git_providers(self.mock_user)
 
         # Assert
         assert 'GITHUB_TOKEN' in result
         assert isinstance(result['GITHUB_TOKEN'], StaticSecret)
         assert result['GITHUB_TOKEN'].value.get_secret_value() == 'static_token_value'
-        self.mock_user_context.get_latest_token.assert_called_once_with(git_provider)
+        self.mock_user_context.get_latest_token.assert_called_once_with(
+            ProviderType.GITHUB
+        )
 
     @pytest.mark.asyncio
-    async def test_setup_secrets_for_git_provider_no_static_token(self):
-        """Test _setup_secrets_for_git_provider when no static token is available."""
+    async def test_setup_secrets_for_git_providers_no_static_token(self):
+        """Test _setup_secrets_for_git_providers when no static token is available."""
         # Arrange
+        from pydantic import SecretStr
+
+        from openhands.integrations.provider import ProviderToken
+
         self.service.web_url = None
         base_secrets = {}
         self.mock_user_context.get_secrets.return_value = base_secrets
         self.mock_user_context.get_latest_token.return_value = None
-        git_provider = ProviderType.GITHUB
+
+        # Mock provider tokens
+        provider_tokens = {
+            ProviderType.GITHUB: ProviderToken(token=SecretStr('github_token')),
+        }
+        self.mock_user_context.get_provider_tokens = AsyncMock(
+            return_value=provider_tokens
+        )
 
         # Act
-        result = await self.service._setup_secrets_for_git_provider(
-            git_provider, self.mock_user
-        )
+        result = await self.service._setup_secrets_for_git_providers(self.mock_user)
 
         # Assert
         assert 'GITHUB_TOKEN' not in result
@@ -206,6 +246,70 @@ class TestLiveStatusAppConversationService:
         assert 'default' in mcp_config
         assert mcp_config['default']['url'] == 'https://test.example.com/mcp/mcp'
         assert mcp_config['default']['headers']['X-Session-API-Key'] == 'mcp_api_key'
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_openhands_model_prefers_user_base_url(self):
+        """openhands/* model uses user.llm_base_url when provided."""
+        # Arrange
+        self.mock_user.llm_model = 'openhands/special'
+        self.mock_user.llm_base_url = 'https://user-llm.example.com'
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        # Act
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user, self.mock_user.llm_model
+        )
+
+        # Assert
+        assert llm.base_url == 'https://user-llm.example.com'
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_openhands_model_uses_provider_default(self):
+        """openhands/* model falls back to configured provider base URL."""
+        # Arrange
+        self.mock_user.llm_model = 'openhands/default'
+        self.mock_user.llm_base_url = None
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        # Act
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user, self.mock_user.llm_model
+        )
+
+        # Assert
+        assert llm.base_url == 'https://provider.example.com'
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_openhands_model_no_base_urls(self):
+        """openhands/* model sets base_url to None when no sources available."""
+        # Arrange
+        self.mock_user.llm_model = 'openhands/default'
+        self.mock_user.llm_base_url = None
+        self.service.openhands_provider_base_url = None
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        # Act
+        llm, _ = await self.service._configure_llm_and_mcp(
+            self.mock_user, self.mock_user.llm_model
+        )
+
+        # Assert
+        assert llm.base_url is None
+
+    @pytest.mark.asyncio
+    async def test_configure_llm_and_mcp_non_openhands_model_ignores_provider(self):
+        """Non-openhands model ignores provider base URL and uses user base URL."""
+        # Arrange
+        self.mock_user.llm_model = 'gpt-4'
+        self.mock_user.llm_base_url = 'https://user-llm.example.com'
+        self.service.openhands_provider_base_url = 'https://provider.example.com'
+        self.mock_user_context.get_mcp_api_key.return_value = None
+
+        # Act
+        llm, _ = await self.service._configure_llm_and_mcp(self.mock_user, None)
+
+        # Assert
+        assert llm.base_url == 'https://user-llm.example.com'
 
     @pytest.mark.asyncio
     async def test_configure_llm_and_mcp_with_user_default_model(self):
@@ -681,7 +785,7 @@ class TestLiveStatusAppConversationService:
         mock_agent = Mock(spec=Agent)
         mock_final_request = Mock(spec=StartConversationRequest)
 
-        self.service._setup_secrets_for_git_provider = AsyncMock(
+        self.service._setup_secrets_for_git_providers = AsyncMock(
             return_value=mock_secrets
         )
         self.service._configure_llm_and_mcp = AsyncMock(
@@ -709,8 +813,8 @@ class TestLiveStatusAppConversationService:
         # Assert
         assert result == mock_final_request
 
-        self.service._setup_secrets_for_git_provider.assert_called_once_with(
-            ProviderType.GITHUB, self.mock_user
+        self.service._setup_secrets_for_git_providers.assert_called_once_with(
+            self.mock_user
         )
         self.service._configure_llm_and_mcp.assert_called_once_with(
             self.mock_user, 'gpt-4'
