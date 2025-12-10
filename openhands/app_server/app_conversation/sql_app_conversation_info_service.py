@@ -21,8 +21,11 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import AsyncGenerator
+from typing import TYPE_CHECKING, AsyncGenerator
 from uuid import UUID
+
+if TYPE_CHECKING:
+    from openhands.app_server.user.user_context import UserContext
 
 from fastapi import Request
 from sqlalchemy import (
@@ -48,7 +51,6 @@ from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationSortOrder,
 )
 from openhands.app_server.services.injector import InjectorState
-from openhands.app_server.user.user_context import UserContext
 from openhands.app_server.utils.sql_utils import (
     Base,
     create_json_type_decorator,

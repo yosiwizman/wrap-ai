@@ -1,9 +1,8 @@
 from typing import TYPE_CHECKING
 
-from storage.api_key_store import ApiKeyStore
-
 if TYPE_CHECKING:
     from openhands.core.config.openhands_config import OpenHandsConfig
+    from storage.api_key_store import ApiKeyStore
 
 from openhands.core.config.mcp_config import (
     MCPSHTTPServerConfig,
@@ -36,6 +35,7 @@ class SaaSOpenHandsMCPConfig(OpenHandsMCPConfig):
         Returns:
             A tuple containing the default SSE server configuration and a list of MCP stdio server configurations
         """
+        from storage.api_key_store import ApiKeyStore
 
         api_key_store = ApiKeyStore.get_instance()
         if user_id:
