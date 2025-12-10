@@ -1,9 +1,12 @@
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from openhands.events.tool import ToolCallMetadata
-from openhands.llm.metrics import Metrics
+
+if TYPE_CHECKING:
+    from openhands.llm.metrics import Metrics
 
 
 class EventSource(str, Enum):
@@ -87,14 +90,17 @@ class Event:
 
     # optional metadata, LLM call cost of the edit
     @property
-    def llm_metrics(self) -> Metrics | None:
+    def llm_metrics(self) -> 'Metrics | None':
         if hasattr(self, '_llm_metrics'):
             metrics = getattr(self, '_llm_metrics')
+            # Lazy import to avoid circular dependency
+            from openhands.llm.metrics import Metrics
+
             return metrics if isinstance(metrics, Metrics) else None
         return None
 
     @llm_metrics.setter
-    def llm_metrics(self, value: Metrics) -> None:
+    def llm_metrics(self, value: 'Metrics') -> None:
         self._llm_metrics = value
 
     # optional field, metadata about the tool call, if the event has a tool call
