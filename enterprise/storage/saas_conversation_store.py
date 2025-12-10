@@ -7,8 +7,10 @@ from datetime import UTC
 from uuid import UUID
 
 from sqlalchemy.orm import sessionmaker
+from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
+    StoredConversationMetadata,
+)
 from storage.database import session_maker
-from storage.stored_conversation_metadata import StoredConversationMetadata
 from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
 from storage.user_store import UserStore
 
