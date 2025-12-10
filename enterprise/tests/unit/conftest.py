@@ -10,21 +10,23 @@ from storage.base import Base
 
 # Anything not loaded here may not have a table created for it.
 from storage.billing_session import BillingSession
-from storage.conversation_callback import ConversationCallback
 from storage.conversation_work import ConversationWork
 from storage.feedback import Feedback
 from storage.github_app_installation import GithubAppInstallation
 from storage.org import Org
 from storage.org_member import OrgMember
 from storage.role import Role
-# Import the actual StoredConversationMetadata from OpenHands core
-from openhands.app_server.app_conversation.sql_app_conversation_info_service import StoredConversationMetadata
 from storage.stored_conversation_metadata_saas import (
     StoredConversationMetadataSaas,
 )
 from storage.stored_offline_token import StoredOfflineToken
 from storage.stripe_customer import StripeCustomer
 from storage.user import User
+
+# Import the actual StoredConversationMetadata from OpenHands core
+from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
+    StoredConversationMetadata,
+)
 
 
 @pytest.fixture

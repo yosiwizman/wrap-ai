@@ -8,10 +8,15 @@ import pytest
 from fastapi import BackgroundTasks, HTTPException, Request, status
 
 # Import the actual StoredConversationMetadata from OpenHands core
-from openhands.app_server.app_conversation.sql_app_conversation_info_service import StoredConversationMetadata
+from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
+    StoredConversationMetadata,
+)
 
 # Mock the lazy import to return the actual class
-with patch('storage.stored_conversation_metadata.StoredConversationMetadata', StoredConversationMetadata):
+with patch(
+    'storage.stored_conversation_metadata.StoredConversationMetadata',
+    StoredConversationMetadata,
+):
     from server.routes.event_webhook import (
         BatchMethod,
         BatchOperation,

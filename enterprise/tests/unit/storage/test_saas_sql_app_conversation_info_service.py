@@ -14,10 +14,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 # Import the actual StoredConversationMetadata from OpenHands core
-from openhands.app_server.app_conversation.sql_app_conversation_info_service import StoredConversationMetadata
+from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
+    StoredConversationMetadata,
+)
 
 # Mock the lazy import to return the actual class
-with patch('storage.stored_conversation_metadata.StoredConversationMetadata', StoredConversationMetadata):
+with patch(
+    'storage.stored_conversation_metadata.StoredConversationMetadata',
+    StoredConversationMetadata,
+):
     # Import the SAAS service
     from enterprise.storage.saas_app_conversation_info_injector import (
         SaasSQLAppConversationInfoService,
