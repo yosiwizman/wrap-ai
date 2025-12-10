@@ -1,10 +1,11 @@
-from openhands.core.config.openhands_config import OpenHandsConfig
-from openhands.integrations.service_types import Repository
 from storage.repository_store import RepositoryStore
 from storage.stored_repository import StoredRepository
 from storage.user_repo_map import UserRepositoryMap
 from storage.user_repo_map_store import UserRepositoryMapStore
+
+from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.core.logger import openhands_logger as logger
+from openhands.integrations.service_types import Repository
 
 
 async def store_repositories_in_db(repos: list[Repository], user_id: str) -> None:
