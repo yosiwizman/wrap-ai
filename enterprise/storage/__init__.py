@@ -26,7 +26,9 @@ from storage.role import Role
 from storage.slack_conversation import SlackConversation
 from storage.slack_team import SlackTeam
 from storage.slack_user import SlackUser
-from storage.stored_conversation_metadata import StoredConversationMetadata
+from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
+    StoredConversationMetadata,
+)
 from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
 from storage.stored_custom_secrets import StoredCustomSecrets
 from storage.stored_offline_token import StoredOfflineToken

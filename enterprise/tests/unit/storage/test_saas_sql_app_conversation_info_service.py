@@ -13,20 +13,13 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-# Import the actual StoredConversationMetadata from OpenHands core
+# Import the SAAS service
+from enterprise.storage.saas_app_conversation_info_injector import (
+    SaasSQLAppConversationInfoService,
+)
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
     StoredConversationMetadata,
 )
-
-# Mock the lazy import to return the actual class
-with patch(
-    'storage.stored_conversation_metadata.StoredConversationMetadata',
-    StoredConversationMetadata,
-):
-    # Import the SAAS service
-    from enterprise.storage.saas_app_conversation_info_injector import (
-        SaasSQLAppConversationInfoService,
-    )
 from openhands.app_server.app_conversation.app_conversation_models import (
     AppConversationInfo,
 )
@@ -205,7 +198,6 @@ class TestSaasSQLAppConversationInfoService:
         saas_service_user1: SaasSQLAppConversationInfoService,
     ):
         """Test that _to_info_with_user_id properly sets user_id from SAAS metadata."""
-        from storage.stored_conversation_metadata import StoredConversationMetadata
         from storage.stored_conversation_metadata_saas import (
             StoredConversationMetadataSaas,
         )

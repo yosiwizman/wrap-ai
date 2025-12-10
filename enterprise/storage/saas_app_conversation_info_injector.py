@@ -6,7 +6,6 @@ from uuid import UUID
 
 from fastapi import Request
 from sqlalchemy import func, select
-from storage.stored_conversation_metadata import StoredConversationMetadata
 from storage.stored_conversation_metadata_saas import StoredConversationMetadataSaas
 from storage.user import User
 
@@ -21,6 +20,7 @@ from openhands.app_server.app_conversation.app_conversation_models import (
 )
 from openhands.app_server.app_conversation.sql_app_conversation_info_service import (
     SQLAppConversationInfoService,
+    StoredConversationMetadata,
 )
 from openhands.app_server.services.injector import InjectorState
 
