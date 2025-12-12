@@ -28,6 +28,7 @@ import { KeyStatusIcon } from "#/components/features/settings/key-status-icon";
 import { DEFAULT_SETTINGS } from "#/services/settings";
 import { getProviderId } from "#/utils/map-provider";
 import { DEFAULT_OPENHANDS_MODEL } from "#/utils/verified-models";
+import { useMe } from "#/hooks/query/use-me";
 
 interface OpenHandsApiKeyHelpProps {
   testId: string;
@@ -69,6 +70,10 @@ function LlmSettingsScreen() {
   const { data: resources } = useAIConfigOptions();
   const { data: settings, isLoading, isFetching } = useSettings();
   const { data: config } = useConfig();
+  const { data: me } = useMe();
+
+  // Determine if user is read-only (users can only view, owners and admins can edit)
+  const isReadOnly = me?.role === "user";
 
   const [view, setView] = React.useState<"basic" | "advanced">("basic");
 
@@ -512,6 +517,7 @@ function LlmSettingsScreen() {
                     onChange={handleModelIsDirty}
                     onDefaultValuesChanged={onDefaultValuesChanged}
                     wrapperClassName="!flex-col !gap-6"
+                    isDisabled={isReadOnly}
                   />
                   {(settings.LLM_MODEL?.startsWith("openhands/") ||
                     currentSelectedModel?.startsWith("openhands/")) && (
@@ -530,6 +536,7 @@ function LlmSettingsScreen() {
                     className="w-full max-w-[680px]"
                     placeholder={settings.LLM_API_KEY_SET ? "<hidden>" : ""}
                     onChange={handleApiKeyIsDirty}
+                    isDisabled={isReadOnly}
                     startContent={
                       settings.LLM_API_KEY_SET && (
                         <KeyStatusIcon isSet={settings.LLM_API_KEY_SET} />
@@ -562,6 +569,7 @@ function LlmSettingsScreen() {
                 type="text"
                 className="w-full max-w-[680px]"
                 onChange={handleCustomModelIsDirty}
+                isDisabled={isReadOnly}
               />
               {(settings.LLM_MODEL?.startsWith("openhands/") ||
                 currentSelectedModel?.startsWith("openhands/")) && (
@@ -577,6 +585,7 @@ function LlmSettingsScreen() {
                 type="text"
                 className="w-full max-w-[680px]"
                 onChange={handleBaseUrlIsDirty}
+                isDisabled={isReadOnly}
               />
 
               {!shouldUseOpenHandsKey && (
@@ -589,6 +598,7 @@ function LlmSettingsScreen() {
                     className="w-full max-w-[680px]"
                     placeholder={settings.LLM_API_KEY_SET ? "<hidden>" : ""}
                     onChange={handleApiKeyIsDirty}
+                    isDisabled={isReadOnly}
                     startContent={
                       settings.LLM_API_KEY_SET && (
                         <KeyStatusIcon isSet={settings.LLM_API_KEY_SET} />
@@ -643,6 +653,7 @@ function LlmSettingsScreen() {
                       defaultSelectedKey={settings.AGENT}
                       isClearable={false}
                       onInputChange={handleAgentIsDirty}
+                      isDisabled={isReadOnly}
                       wrapperClassName="w-full max-w-[680px]"
                     />
                   )}
@@ -662,7 +673,7 @@ function LlmSettingsScreen() {
                     DEFAULT_SETTINGS.CONDENSER_MAX_SIZE
                   )?.toString()}
                   onChange={(value) => handleCondenserMaxSizeIsDirty(value)}
-                  isDisabled={!settings.ENABLE_DEFAULT_CONDENSER}
+                  isDisabled={isReadOnly || !settings.ENABLE_DEFAULT_CONDENSER}
                 />
                 <p className="text-xs text-tertiary-alt mt-1">
                   {t(I18nKey.SETTINGS$CONDENSER_MAX_SIZE_TOOLTIP)}
@@ -674,6 +685,7 @@ function LlmSettingsScreen() {
                 name="enable-memory-condenser-switch"
                 defaultIsToggled={settings.ENABLE_DEFAULT_CONDENSER}
                 onToggle={handleEnableDefaultCondenserIsDirty}
+                isDisabled={isReadOnly}
               >
                 {t(I18nKey.SETTINGS$ENABLE_MEMORY_CONDENSATION)}
               </SettingsSwitch>
@@ -686,6 +698,7 @@ function LlmSettingsScreen() {
                   onToggle={handleConfirmationModeIsDirty}
                   defaultIsToggled={settings.CONFIRMATION_MODE}
                   isBeta
+                  isDisabled={isReadOnly}
                 >
                   {t(I18nKey.SETTINGS$CONFIRMATION_MODE)}
                 </SettingsSwitch>
@@ -711,6 +724,7 @@ function LlmSettingsScreen() {
                       )}
                       selectedKey={selectedSecurityAnalyzer || "none"}
                       isClearable={false}
+                      isDisabled={isReadOnly}
                       onSelectionChange={(key) => {
                         const newValue = key?.toString() || "";
                         setSelectedSecurityAnalyzer(newValue);
@@ -746,7 +760,7 @@ function LlmSettingsScreen() {
             testId="submit-button"
             type="submit"
             variant="primary"
-            isDisabled={!formIsDirty || isPending}
+            isDisabled={isReadOnly || !formIsDirty || isPending}
           >
             {!isPending && t("SETTINGS$SAVE_CHANGES")}
             {isPending && t("SETTINGS$SAVING")}

@@ -183,7 +183,7 @@ export const handlers = [
       POSTHOG_CLIENT_KEY: "fake-posthog-client-key",
       FEATURE_FLAGS: {
         ENABLE_BILLING: false,
-        HIDE_LLM_SETTINGS: IS_MOCK_SAAS,
+        HIDE_LLM_SETTINGS: false,
         ENABLE_JIRA: false,
         ENABLE_JIRA_DC: false,
         ENABLE_LINEAR: false,
