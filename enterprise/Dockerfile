@@ -2,6 +2,9 @@ ARG OPENHANDS_VERSION=latest
 ARG BASE="ghcr.io/openhands/openhands"
 FROM ${BASE}:${OPENHANDS_VERSION}
 
+# Enable JSON logging for cloud deployments
+ENV LOG_JSON=1
+
 # Datadog labels
 LABEL com.datadoghq.tags.service="deploy"
 LABEL com.datadoghq.tags.env="${DD_ENV}"
