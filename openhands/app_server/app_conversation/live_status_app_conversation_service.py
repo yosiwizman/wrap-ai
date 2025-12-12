@@ -1153,7 +1153,7 @@ class LiveStatusAppConversationServiceInjector(AppConversationServiceInjector):
         description='The Tavily Search API key to add to MCP integration',
     )
     sandbox_grouping_strategy: SandboxGroupingStrategy = Field(
-        default=SandboxGroupingStrategy.NO_GROUPING,
+        default=SandboxGroupingStrategy.ADD_TO_ANY,
         description='Strategy for grouping conversations within sandboxes',
     )
 
