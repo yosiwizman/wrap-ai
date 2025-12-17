@@ -1,4 +1,8 @@
 import importlib
+import io
+import json
+import logging
+import logging.config
 import os
 import sys
 from unittest import mock
@@ -66,7 +70,7 @@ def test_litellm_loggers_suppressed_with_uvicorn_json_config(reset_litellm):
     causing them to propagate to the root logger.
 
     The fix ensures LiteLLM loggers are explicitly configured in the uvicorn config
-    with propagate=False and empty handlers list to prevent logs from leaking through.
+    with propagate=False and NullHandler to prevent logs from leaking through.
     """
     # Read the source file directly from disk to verify the fix is present
     # (pytest caches bytecode, so we can't rely on imports or inspect.getsource)
@@ -90,18 +94,147 @@ def test_litellm_loggers_suppressed_with_uvicorn_json_config(reset_litellm):
             f'{logger_name} logger configuration should be present in logger.py source'
         )
 
-    # Verify the fix has the correct settings by checking for key phrases
-    assert "'handlers': []" in source or '"handlers": []' in source, (
-        'Fix should set handlers to empty list'
+    assert "'class': 'logging.NullHandler'" in source, (
+        'Fix should include NullHandler definition'
     )
     assert "'propagate': False" in source or '"propagate": False' in source, (
         'Fix should set propagate to False'
     )
-    assert "'level': 'CRITICAL'" in source or '"level": "CRITICAL"' in source, (
-        'Fix should set level to CRITICAL'
+    assert "litellm_level = 'CRITICAL'" in source, (
+        'Fix should set level to CRITICAL when suppressing'
     )
 
-    # Note: We don't do a functional test here because pytest's module caching
-    # means the imported function may not reflect the fix we just verified in the source.
-    # The source code verification is sufficient to confirm the fix is in place,
-    # and in production (without pytest's aggressive caching), the fix will work correctly.
+
+def test_litellm_no_stderr_output_after_dictconfig():
+    """Test that LiteLLM loggers don't output to stderr after dictConfig is applied."""
+    from litellm._logging import verbose_logger
+
+    config = {
+        'version': 1,
+        'disable_existing_loggers': False,
+        'handlers': {
+            'null': {
+                'class': 'logging.NullHandler',
+            },
+        },
+        'loggers': {
+            'LiteLLM': {
+                'handlers': ['null'],
+                'level': 'CRITICAL',
+                'propagate': False,
+            },
+            'LiteLLM Router': {
+                'handlers': ['null'],
+                'level': 'CRITICAL',
+                'propagate': False,
+            },
+            'LiteLLM Proxy': {
+                'handlers': ['null'],
+                'level': 'CRITICAL',
+                'propagate': False,
+            },
+        },
+    }
+
+    logging.config.dictConfig(config)
+
+    assert verbose_logger.handlers, 'Logger should have handlers (NullHandler)'
+    assert isinstance(verbose_logger.handlers[0], logging.NullHandler)
+    assert verbose_logger.propagate is False
+
+    old_stderr = sys.stderr
+    sys.stderr = io.StringIO()
+
+    try:
+        verbose_logger.debug('DEBUG message')
+        verbose_logger.info('INFO message')
+        verbose_logger.warning('WARNING message')
+        verbose_logger.error('ERROR message')
+        verbose_logger.critical('CRITICAL message')
+
+        stderr_output = sys.stderr.getvalue()
+    finally:
+        sys.stderr = old_stderr
+
+    assert stderr_output == '', (
+        f'No output should go to stderr, but got: {stderr_output!r}'
+    )
+
+
+def test_litellm_json_output_when_enabled():
+    """Test that LiteLLM logs are output as JSON when configured with JSON handler."""
+    from litellm._logging import verbose_logger
+    from pythonjsonlogger.jsonlogger import JsonFormatter
+
+    capture_stream = io.StringIO()
+    handler = logging.StreamHandler(capture_stream)
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(
+        JsonFormatter('%(message)s %(levelname)s %(name)s %(asctime)s')
+    )
+
+    verbose_logger.handlers.clear()
+    verbose_logger.addHandler(handler)
+    verbose_logger.setLevel(logging.INFO)
+    verbose_logger.propagate = False
+
+    old_stderr = sys.stderr
+    sys.stderr = io.StringIO()
+
+    try:
+        test_message = 'LiteLLM completion() model= test-model; provider = test'
+        verbose_logger.info(test_message)
+
+        stdout_output = capture_stream.getvalue()
+        stderr_output = sys.stderr.getvalue()
+    finally:
+        sys.stderr = old_stderr
+
+    assert stderr_output == '', (
+        f'No output should go to stderr, but got: {stderr_output!r}'
+    )
+    assert stdout_output, 'Output should be captured'
+
+    try:
+        log_entry = json.loads(stdout_output.strip())
+    except json.JSONDecodeError as e:
+        pytest.fail(
+            f'Output should be valid JSON, but got: {stdout_output!r}, error: {e}'
+        )
+
+    assert log_entry.get('message') == test_message
+    assert log_entry.get('levelname') == 'INFO'
+    assert log_entry.get('name') == 'LiteLLM'
+
+
+def test_get_uvicorn_json_log_config_litellm_suppressed():
+    """Test that LiteLLM loggers use NullHandler when LOG_JSON=false."""
+    with mock.patch.dict(os.environ, {'LOG_JSON': 'false'}, clear=False):
+        import openhands.core.logger
+
+        importlib.reload(openhands.core.logger)
+        config = openhands.core.logger.get_uvicorn_json_log_config()
+
+    assert 'LiteLLM' in config['loggers']
+    assert config['loggers']['LiteLLM']['handlers'] == ['null']
+    assert config['loggers']['LiteLLM']['level'] == 'CRITICAL'
+    assert config['loggers']['LiteLLM']['propagate'] is False
+    assert 'null' in config['handlers']
+    assert config['handlers']['null']['class'] == 'logging.NullHandler'
+
+
+def test_get_uvicorn_json_log_config_litellm_json_enabled():
+    """Test that LiteLLM loggers use JSON handler to stdout when LOG_JSON=true."""
+    with mock.patch.dict(os.environ, {'LOG_JSON': 'true'}, clear=False):
+        import openhands.core.logger
+
+        importlib.reload(openhands.core.logger)
+        config = openhands.core.logger.get_uvicorn_json_log_config()
+
+    assert 'LiteLLM' in config['loggers']
+    assert config['loggers']['LiteLLM']['handlers'] == ['litellm_json']
+    assert config['loggers']['LiteLLM']['level'] == 'INFO'
+    assert config['loggers']['LiteLLM']['propagate'] is False
+    assert 'litellm_json' in config['handlers']
+    assert config['handlers']['litellm_json']['stream'] == 'ext://sys.stdout'
+    assert config['handlers']['litellm_json']['formatter'] == 'json'

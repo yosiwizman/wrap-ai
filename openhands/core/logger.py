@@ -527,6 +527,13 @@ def get_uvicorn_json_log_config() -> dict:
     Returns:
         A dict suitable for passing to uvicorn.run(..., log_config=...).
     """
+    if LOG_JSON:
+        litellm_handler = ['litellm_json']
+        litellm_level = 'INFO'
+    else:
+        litellm_handler = ['null']
+        litellm_level = 'CRITICAL'
+
     return {
         'version': 1,
         'disable_existing_loggers': False,
@@ -566,6 +573,16 @@ def get_uvicorn_json_log_config() -> dict:
                 'formatter': 'json_access',
                 'stream': 'ext://sys.stdout',
             },
+            # NullHandler prevents Python's lastResort from outputting to stderr
+            'null': {
+                'class': 'logging.NullHandler',
+            },
+            'litellm_json': {
+                'class': 'logging.StreamHandler',
+                'level': 'INFO',
+                'formatter': 'json',
+                'stream': 'ext://sys.stdout',
+            },
         },
         'loggers': {
             'uvicorn': {
@@ -583,21 +600,19 @@ def get_uvicorn_json_log_config() -> dict:
                 'level': 'INFO',
                 'propagate': False,
             },
-            # Suppress LiteLLM loggers to prevent them from leaking through root logger
-            # This is necessary because logging.config.dictConfig() resets the .disabled flag
             'LiteLLM': {
-                'handlers': [],
-                'level': 'CRITICAL',
+                'handlers': litellm_handler,
+                'level': litellm_level,
                 'propagate': False,
             },
             'LiteLLM Router': {
-                'handlers': [],
-                'level': 'CRITICAL',
+                'handlers': litellm_handler,
+                'level': litellm_level,
                 'propagate': False,
             },
             'LiteLLM Proxy': {
-                'handlers': [],
-                'level': 'CRITICAL',
+                'handlers': litellm_handler,
+                'level': litellm_level,
                 'propagate': False,
             },
         },
