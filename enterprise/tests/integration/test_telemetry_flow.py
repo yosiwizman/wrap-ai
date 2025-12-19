@@ -5,10 +5,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from server.telemetry.service import TelemetryService
-from storage.telemetry_identity import TelemetryIdentity
-from storage.telemetry_metrics import TelemetryMetrics
 
 
 @pytest.fixture
@@ -40,10 +37,10 @@ class TestTelemetryServiceLifecycle:
         """Test that service starts and stops without errors."""
         with patch.object(
             fresh_telemetry_service, '_collection_loop', new_callable=AsyncMock
-        ) as mock_collection:
+        ):
             with patch.object(
                 fresh_telemetry_service, '_upload_loop', new_callable=AsyncMock
-            ) as mock_upload:
+            ):
                 with patch.object(
                     fresh_telemetry_service,
                     '_initial_collection_check',
@@ -78,7 +75,7 @@ class TestTelemetryServiceLifecycle:
                     fresh_telemetry_service,
                     '_initial_collection_check',
                     new_callable=AsyncMock,
-                ) as mock_initial:
+                ):
                     await fresh_telemetry_service.start()
 
                     # Wait for async task to be created
@@ -114,7 +111,8 @@ class TestTelemetryServiceLifecycle:
 
                     # Verify tasks are the same (not recreated)
                     assert (
-                        fresh_telemetry_service._collection_task == first_collection_task
+                        fresh_telemetry_service._collection_task
+                        == first_collection_task
                     )
 
                     # Clean up
@@ -286,16 +284,22 @@ class TestCollectionLoop:
             pass
 
         with patch.object(
-            fresh_telemetry_service, '_collect_metrics', side_effect=mock_collect_with_error
+            fresh_telemetry_service,
+            '_collect_metrics',
+            side_effect=mock_collect_with_error,
         ):
             with patch.object(
                 fresh_telemetry_service, '_should_collect', return_value=True
             ):
                 with patch.object(
-                    fresh_telemetry_service, '_is_identity_established', return_value=True
+                    fresh_telemetry_service,
+                    '_is_identity_established',
+                    return_value=True,
                 ):
                     # Start collection loop
-                    task = asyncio.create_task(fresh_telemetry_service._collection_loop())
+                    task = asyncio.create_task(
+                        fresh_telemetry_service._collection_loop()
+                    )
 
                     # Wait for multiple iterations
                     await asyncio.sleep(0.3)
@@ -354,13 +358,17 @@ class TestUploadLoop:
             pass
 
         with patch.object(
-            fresh_telemetry_service, '_upload_pending_metrics', side_effect=mock_upload_with_error
+            fresh_telemetry_service,
+            '_upload_pending_metrics',
+            side_effect=mock_upload_with_error,
         ):
             with patch.object(
                 fresh_telemetry_service, '_should_upload', return_value=True
             ):
                 with patch.object(
-                    fresh_telemetry_service, '_is_identity_established', return_value=True
+                    fresh_telemetry_service,
+                    '_is_identity_established',
+                    return_value=True,
                 ):
                     # Start upload loop
                     task = asyncio.create_task(fresh_telemetry_service._upload_loop())
@@ -392,7 +400,9 @@ class TestMetricsCollection:
             mock_session.__exit__ = MagicMock(return_value=None)
             mock_session_maker.return_value = mock_session
 
-            with patch('server.telemetry.service.CollectorRegistry') as mock_registry_class:
+            with patch(
+                'server.telemetry.service.CollectorRegistry'
+            ) as mock_registry_class:
                 mock_registry = MagicMock()
                 mock_registry_class.return_value = mock_registry
 
@@ -464,14 +474,18 @@ class TestReplicatedIntegration:
             with patch('server.telemetry.service.REPLICATED_AVAILABLE', True):
                 with patch('server.telemetry.service.InstanceStatus') as mock_status:
                     mock_status.RUNNING = 'RUNNING'
-                    with patch('server.telemetry.service.ReplicatedClient') as mock_client_class:
+                    with patch(
+                        'server.telemetry.service.ReplicatedClient'
+                    ) as mock_client_class:
                         mock_client = MagicMock()
                         mock_customer = MagicMock()
                         mock_customer.customer_id = 'cust-123'
                         mock_instance = MagicMock()
                         mock_instance.instance_id = 'inst-456'
 
-                        mock_customer.get_or_create_instance.return_value = mock_instance
+                        mock_customer.get_or_create_instance.return_value = (
+                            mock_instance
+                        )
                         mock_client.customer.get_or_create.return_value = mock_customer
 
                         mock_client_class.return_value = mock_client

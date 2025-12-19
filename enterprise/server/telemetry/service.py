@@ -15,6 +15,7 @@ from telemetry.registry import CollectorRegistry
 # Optional import for Replicated SDK (to be implemented in M4)
 try:
     from replicated import InstanceStatus, ReplicatedClient
+
     REPLICATED_AVAILABLE = True
 except ImportError:
     REPLICATED_AVAILABLE = False
@@ -233,7 +234,9 @@ class TelemetryService:
                     # If identity was just established, it will be created during upload
                     # Continue with short interval for one more cycle to ensure upload succeeds
                     if not was_established_before and self._is_identity_established():
-                        logger.info('Identity just established - first upload completed')
+                        logger.info(
+                            'Identity just established - first upload completed'
+                        )
 
                     logger.info('Metrics upload completed')
 
@@ -268,9 +271,11 @@ class TelemetryService:
         """
         try:
             with session_maker() as session:
-                identity = session.query(TelemetryIdentity).filter(
-                    TelemetryIdentity.id == 1
-                ).first()
+                identity = (
+                    session.query(TelemetryIdentity)
+                    .filter(TelemetryIdentity.id == 1)
+                    .first()
+                )
 
                 # Identity is established if we have both customer_id and instance_id
                 return (
@@ -316,9 +321,11 @@ class TelemetryService:
 
                 if not last_uploaded:
                     # Check if we have any pending metrics to upload
-                    pending_count = session.query(TelemetryMetrics).filter(
-                        TelemetryMetrics.uploaded_at.is_(None)
-                    ).count()
+                    pending_count = (
+                        session.query(TelemetryMetrics)
+                        .filter(TelemetryMetrics.uploaded_at.is_(None))
+                        .count()
+                    )
                     return pending_count > 0
 
                 hours_since = (
@@ -355,7 +362,7 @@ class TelemetryService:
                         f'Collector {collector.collector_name} failed: {e}',
                         exc_info=True,
                     )
-                    collector_results[collector.collector_name] = f'error: {str(e)}'
+                    collector_results[collector.collector_name] = 0
 
             # Store metrics in database
             with session_maker() as session:
@@ -483,13 +490,11 @@ class TelemetryService:
 
         return None
 
-    def _get_or_create_identity(
-        self, session, admin_email: str
-    ) -> TelemetryIdentity:
+    def _get_or_create_identity(self, session, admin_email: str) -> TelemetryIdentity:
         """Get or create telemetry identity with customer and instance IDs."""
-        identity = session.query(TelemetryIdentity).filter(
-            TelemetryIdentity.id == 1
-        ).first()
+        identity = (
+            session.query(TelemetryIdentity).filter(TelemetryIdentity.id == 1).first()
+        )
 
         if not identity:
             identity = TelemetryIdentity(id=1)

@@ -1,11 +1,9 @@
 """Unit tests for the TelemetryService."""
 
-import asyncio
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from server.telemetry.service import TelemetryService
 
 
@@ -39,7 +37,6 @@ class TestTelemetryServiceInitialization:
 
     def test_initialization_once(self, telemetry_service):
         """Test that __init__ only runs once."""
-        initial_collection_interval = telemetry_service.collection_interval_days
         telemetry_service.collection_interval_days = 999
 
         # Create another "instance" (should be same singleton)
@@ -132,9 +129,7 @@ class TestIdentityEstablishment:
         assert not telemetry_service._is_identity_established()
 
     @patch('server.telemetry.service.session_maker')
-    def test_identity_established_complete(
-        self, mock_session_maker, telemetry_service
-    ):
+    def test_identity_established_complete(self, mock_session_maker, telemetry_service):
         """Test identity established when both customer_id and instance_id exist."""
         mock_session = MagicMock()
         mock_session.__enter__ = MagicMock(return_value=mock_session)
@@ -239,9 +234,7 @@ class TestUploadLogic:
         assert telemetry_service._should_upload()
 
     @patch('server.telemetry.service.session_maker')
-    def test_should_not_upload_no_pending(
-        self, mock_session_maker, telemetry_service
-    ):
+    def test_should_not_upload_no_pending(self, mock_session_maker, telemetry_service):
         """Test should not upload when no pending metrics exist."""
         mock_session = MagicMock()
         mock_session.__enter__ = MagicMock(return_value=mock_session)
@@ -355,9 +348,7 @@ class TestGetAdminEmail:
         """Test when no admin email is available."""
         mock_getenv.return_value = None
 
-        mock_session.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = (
-            None
-        )
+        mock_session.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = None
 
         email = telemetry_service._get_admin_email(mock_session)
 
@@ -388,7 +379,7 @@ class TestGetOrCreateIdentity:
                     mock_customer
                 )
 
-                identity = telemetry_service._get_or_create_identity(
+                telemetry_service._get_or_create_identity(
                     mock_session, 'test@example.com'
                 )
 
@@ -405,9 +396,7 @@ class TestGetOrCreateIdentity:
             mock_identity
         )
 
-        identity = telemetry_service._get_or_create_identity(
-            mock_session, 'test@example.com'
-        )
+        telemetry_service._get_or_create_identity(mock_session, 'test@example.com')
 
         # Should not create new instance since both IDs exist
         assert mock_session.add.call_count == 0
@@ -425,9 +414,7 @@ class TestLicenseWarningStatus:
         mock_session.__exit__ = MagicMock(return_value=None)
         mock_session_maker.return_value = mock_session
 
-        mock_session.query.return_value.filter.return_value.order_by.return_value.first.return_value = (
-            None
-        )
+        mock_session.query.return_value.filter.return_value.order_by.return_value.first.return_value = None
 
         status = telemetry_service.get_license_warning_status()
 
@@ -446,9 +433,7 @@ class TestLicenseWarningStatus:
         mock_metric = MagicMock()
         mock_metric.uploaded_at = datetime.now(timezone.utc) - timedelta(days=2)
 
-        mock_session.query.return_value.filter.return_value.order_by.return_value.first.return_value = (
-            mock_metric
-        )
+        mock_session.query.return_value.filter.return_value.order_by.return_value.first.return_value = mock_metric
 
         status = telemetry_service.get_license_warning_status()
 
@@ -466,9 +451,7 @@ class TestLicenseWarningStatus:
         mock_metric = MagicMock()
         mock_metric.uploaded_at = datetime.now(timezone.utc) - timedelta(days=5)
 
-        mock_session.query.return_value.filter.return_value.order_by.return_value.first.return_value = (
-            mock_metric
-        )
+        mock_session.query.return_value.filter.return_value.order_by.return_value.first.return_value = mock_metric
 
         status = telemetry_service.get_license_warning_status()
 
@@ -489,7 +472,9 @@ class TestLifecycleManagement:
                 telemetry_service, '_upload_loop', new_callable=AsyncMock
             ):
                 with patch.object(
-                    telemetry_service, '_initial_collection_check', new_callable=AsyncMock
+                    telemetry_service,
+                    '_initial_collection_check',
+                    new_callable=AsyncMock,
                 ):
                     await telemetry_service.start()
 
@@ -509,7 +494,9 @@ class TestLifecycleManagement:
                 telemetry_service, '_upload_loop', new_callable=AsyncMock
             ):
                 with patch.object(
-                    telemetry_service, '_initial_collection_check', new_callable=AsyncMock
+                    telemetry_service,
+                    '_initial_collection_check',
+                    new_callable=AsyncMock,
                 ):
                     await telemetry_service.start()
                     first_collection_task = telemetry_service._collection_task
@@ -535,7 +522,9 @@ class TestLifecycleManagement:
                 telemetry_service, '_upload_loop', new_callable=AsyncMock
             ):
                 with patch.object(
-                    telemetry_service, '_initial_collection_check', new_callable=AsyncMock
+                    telemetry_service,
+                    '_initial_collection_check',
+                    new_callable=AsyncMock,
                 ):
                     await telemetry_service.start()
                     await telemetry_service.stop()
