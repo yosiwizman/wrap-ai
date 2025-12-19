@@ -1153,13 +1153,27 @@ Implement the embedded telemetry service that runs within the main enterprise se
 
 - [ ] `enterprise/server/telemetry/__init__.py` - Package initialization
 - [ ] `enterprise/server/telemetry/service.py` - Core TelemetryService singleton class
+  - [ ] Implement `TelemetryService.__init__()` with hardcoded Replicated publishable key
+  - [ ] Add two-phase interval constants (`bootstrap_check_interval_seconds=180`, `normal_check_interval_seconds=3600`)
+  - [ ] Implement `_is_identity_established()` method for phase detection
+  - [ ] Implement `_collection_loop()` with adaptive intervals (3 min bootstrap, 1 hour normal)
+  - [ ] Implement `_upload_loop()` with adaptive intervals and identity creation detection
+  - [ ] Implement `_get_admin_email()` to support bootstrap phase (env var or first user)
+  - [ ] Implement `_get_or_create_identity()` for Replicated customer/instance creation
 - [ ] `enterprise/server/telemetry/lifecycle.py` - FastAPI lifespan integration
 - [ ] `enterprise/tests/unit/telemetry/test_service.py` - Service unit tests
+  - [ ] Test `_is_identity_established()` with no identity, partial identity, complete identity
+  - [ ] Test interval selection logic (bootstrap vs normal)
+  - [ ] Test phase transition detection in upload loop
 - [ ] `enterprise/tests/unit/telemetry/test_lifecycle.py` - Lifespan integration tests
 
 **Key Features**:
 - Singleton service pattern with thread-safe initialization
-- Independent AsyncIO background tasks for collection (7 days) and upload (24 hours)
+- Two-phase adaptive scheduling:
+  - **Bootstrap phase**: Checks every 3 minutes until first user authenticates (rapid initial visibility)
+  - **Normal phase**: Checks every 1 hour, collects every 7 days, uploads every 24 hours (low overhead)
+- Automatic identity establishment detection and phase transition
+- Replicated publishable key hardcoded in source (not environment variables)
 - Graceful startup and shutdown via FastAPI lifespan events
 - Automatic recovery from errors without crashing main server
 
@@ -1178,11 +1192,16 @@ Implement the embedded telemetry service that runs within the main enterprise se
 
 - [ ] `enterprise/tests/integration/test_telemetry_flow.py` - Full collection and upload cycle
 - [ ] Test startup/shutdown behavior
+- [ ] Test two-phase scheduling:
+  - [ ] Bootstrap phase: 3-minute check intervals before first user
+  - [ ] Phase transition: Immediate upload when first user authenticates
+  - [ ] Normal phase: 1-hour check intervals after identity established
+  - [ ] Identity detection: `_is_identity_established()` logic
 - [ ] Test interval timing and database state
 - [ ] Test Replicated API integration (mocked)
-- [ ] Test error handling and recovery
+- [ ] Test error handling and recovery (falls back to bootstrap interval)
 
-**Demo**: Telemetry service starts automatically with the enterprise server, collects metrics weekly, uploads daily to Replicated, and cannot be disabled without code modification.
+**Demo**: Telemetry service starts automatically with the enterprise server. New installations become visible within 3 minutes of first user login. Established installations collect metrics weekly and upload daily to Replicated. The service cannot be disabled without code modification.
 
 ### 5.4 License Warning API (M4)
 
