@@ -114,6 +114,20 @@ The Replicated platform provides vendor-hosted infrastructure for collecting cus
 - **License**: MIT
 - **Current Version**: 0.1.0a2 (alpha)
 
+**Authentication - Publishable API Keys:**
+
+Replicated uses a **publishable key** model (similar to Stripe and other modern SaaS APIs) that is specifically designed to be safely embedded in customer-deployed applications:
+
+- **Publishable Key** (`replicated_pk_...`): Safe to embed in application code and Docker images
+  - **Limited Privileges**: Can only report metrics and instance status to the vendor portal (write-only for telemetry)
+  - **Read-Only Access**: Cannot access other customers' data or modify vendor account settings
+  - **Shared Across Deployments**: The same key is used for all customer installations of your application
+  - **Not Customer-Specific**: Unlike license keys, the publishable key identifies your vendor account, not individual customers
+  
+- **Customer Identification**: Individual customers are identified by their email address or instance fingerprint, not by different API keys
+
+This security model allows vendors to embed telemetry collection directly in their application without exposing sensitive credentials. The key should be stored in environment variables for configurability, but can be safely committed to source code if needed.
+
 **Key Concepts:**
 - **Customer**: Represents a unique OHE installation, identified by email or installation fingerprint
 - **Instance**: Represents a specific deployment of OHE for a customer
@@ -354,7 +368,11 @@ class TelemetryService:
         self.upload_interval_hours = int(os.getenv('TELEMETRY_UPLOAD_INTERVAL_HOURS', '24'))
         self.license_warning_threshold_days = int(os.getenv('TELEMETRY_WARNING_THRESHOLD_DAYS', '4'))
         
-        # Replicated configuration
+        # Replicated API configuration
+        # NOTE: REPLICATED_PUBLISHABLE_KEY is a vendor-wide publishable key (starts with replicated_pk_...)
+        # that is safe to embed in the application. It has limited privileges (write-only for metrics)
+        # and cannot access other customers' data. The same key is shared across all customer deployments.
+        # Individual customers are identified by email, not by different API keys.
         self.replicated_publishable_key = os.getenv('REPLICATED_PUBLISHABLE_KEY')
         self.replicated_app_slug = os.getenv('REPLICATED_APP_SLUG', 'openhands-enterprise')
         
@@ -580,7 +598,12 @@ class TelemetryService:
                 # Get or create identity
                 identity = self._get_or_create_identity(session, admin_email)
                 
-                # Initialize Replicated client
+                # Initialize Replicated client with publishable key
+                # This publishable key is intentionally embedded in the application and shared
+                # across all customer deployments. It's safe to use here because:
+                # 1. It only has write privileges for metrics (cannot read other customers' data)
+                # 2. It identifies the vendor (OpenHands), not individual customers
+                # 3. Customer identification happens via email address passed to get_or_create()
                 client = ReplicatedClient(
                     publishable_key=self.replicated_publishable_key,
                     app_slug=self.replicated_app_slug
@@ -919,7 +942,11 @@ The telemetry service is configured entirely through environment variables. No K
 
 ```bash
 # Replicated API configuration (required for upload)
-REPLICATED_PUBLISHABLE_KEY=<your-replicated-publishable-key>
+# The publishable key is a vendor-wide key that is safe to embed in your application.
+# It starts with "replicated_pk_" and has limited privileges (write-only for metrics).
+# The same key is shared across ALL customer deployments - customers are identified
+# by their email address, not by different API keys.
+REPLICATED_PUBLISHABLE_KEY=replicated_pk_xxxxxxxxxxxxxxxxxxxxx
 REPLICATED_APP_SLUG=openhands-enterprise
 
 # Optional: Explicit admin email (recommended)
@@ -940,7 +967,9 @@ TELEMETRY_WARNING_THRESHOLD_DAYS=4
 telemetry:
   # Replicated configuration
   replicated:
-    publishableKey: ""  # Set via secret or values
+    # Publishable key (replicated_pk_...) - safe to embed, shared across all deployments
+    # This key only has write privileges for metrics and cannot access other customers' data
+    publishableKey: ""  # Set via secret or values (can be committed to source if needed)
     appSlug: "openhands-enterprise"
   
   # Optional admin email
