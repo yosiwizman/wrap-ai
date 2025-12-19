@@ -32,9 +32,10 @@ export function Dropdown({
   testId,
 }: DropdownProps) {
   const [inputValue, setInputValue] = useState(defaultValue?.label ?? "");
+  const [searchTerm, setSearchTerm] = useState("");
 
   const filteredOptions = options.filter((option) =>
-    option.label.toLowerCase().includes(inputValue.toLowerCase()),
+    option.label.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   const {
@@ -51,6 +52,7 @@ export function Dropdown({
     inputValue,
     onInputValueChange: ({ inputValue: newValue }) => {
       setInputValue(newValue ?? "");
+      setSearchTerm(newValue ?? "");
     },
     defaultSelectedItem: defaultValue,
     onSelectedItemChange: ({ selectedItem: newSelectedItem }) => {
@@ -61,9 +63,10 @@ export function Dropdown({
       selectedItem: currentSelectedItem,
     }) => {
       if (newIsOpen) {
-        setInputValue("");
+        setSearchTerm("");
       } else {
         setInputValue(currentSelectedItem?.label ?? "");
+        setSearchTerm("");
       }
     },
   });

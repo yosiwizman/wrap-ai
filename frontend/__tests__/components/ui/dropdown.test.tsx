@@ -154,6 +154,30 @@ describe("Dropdown", () => {
       const selectedOption = screen.getByRole("option", { name: "Option 1" });
       expect(selectedOption).toHaveAttribute("aria-selected", "true");
     });
+
+    it("should preserve selected value in input and show all options when reopening dropdown", async () => {
+      const user = userEvent.setup();
+      render(<Dropdown options={mockOptions} />);
+
+      const trigger = screen.getByTestId("dropdown-trigger");
+      await user.click(trigger);
+      await user.click(screen.getByRole("option", { name: "Option 1" }));
+
+      // Reopen the dropdown
+      await user.click(trigger);
+
+      const input = screen.getByRole("combobox");
+      expect(input).toHaveValue("Option 1");
+      expect(
+        screen.getByRole("option", { name: "Option 1" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("option", { name: "Option 2" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("option", { name: "Option 3" }),
+      ).toBeInTheDocument();
+    });
   });
 
   describe("Clear button", () => {
