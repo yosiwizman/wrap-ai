@@ -1151,21 +1151,21 @@ Implement the embedded telemetry service that runs within the main enterprise se
 
 #### 5.3.1 OpenHands - Telemetry Service
 
-- [ ] `enterprise/server/telemetry/__init__.py` - Package initialization
-- [ ] `enterprise/server/telemetry/service.py` - Core TelemetryService singleton class
-  - [ ] Implement `TelemetryService.__init__()` with hardcoded Replicated publishable key
-  - [ ] Add two-phase interval constants (`bootstrap_check_interval_seconds=180`, `normal_check_interval_seconds=3600`)
-  - [ ] Implement `_is_identity_established()` method for phase detection
-  - [ ] Implement `_collection_loop()` with adaptive intervals (3 min bootstrap, 1 hour normal)
-  - [ ] Implement `_upload_loop()` with adaptive intervals and identity creation detection
-  - [ ] Implement `_get_admin_email()` to support bootstrap phase (env var or first user)
-  - [ ] Implement `_get_or_create_identity()` for Replicated customer/instance creation
-- [ ] `enterprise/server/telemetry/lifecycle.py` - FastAPI lifespan integration
-- [ ] `enterprise/tests/unit/telemetry/test_service.py` - Service unit tests
-  - [ ] Test `_is_identity_established()` with no identity, partial identity, complete identity
-  - [ ] Test interval selection logic (bootstrap vs normal)
-  - [ ] Test phase transition detection in upload loop
-- [ ] `enterprise/tests/unit/telemetry/test_lifecycle.py` - Lifespan integration tests
+- [x] `enterprise/server/telemetry/__init__.py` - Package initialization
+- [x] `enterprise/server/telemetry/service.py` - Core TelemetryService singleton class
+  - [x] Implement `TelemetryService.__init__()` with hardcoded Replicated publishable key
+  - [x] Add two-phase interval constants (`bootstrap_check_interval_seconds=180`, `normal_check_interval_seconds=3600`)
+  - [x] Implement `_is_identity_established()` method for phase detection
+  - [x] Implement `_collection_loop()` with adaptive intervals (3 min bootstrap, 1 hour normal)
+  - [x] Implement `_upload_loop()` with adaptive intervals and identity creation detection
+  - [x] Implement `_get_admin_email()` to support bootstrap phase (env var or first user)
+  - [x] Implement `_get_or_create_identity()` for Replicated customer/instance creation
+- [x] `enterprise/server/telemetry/lifecycle.py` - FastAPI lifespan integration
+- [x] `enterprise/tests/unit/telemetry/test_service.py` - Service unit tests
+  - [x] Test `_is_identity_established()` with no identity, partial identity, complete identity
+  - [x] Test interval selection logic (bootstrap vs normal)
+  - [x] Test phase transition detection in upload loop
+- [x] `enterprise/tests/unit/telemetry/test_lifecycle.py` - Lifespan integration tests
 
 **Key Features**:
 - Singleton service pattern with thread-safe initialization
@@ -1180,7 +1180,7 @@ Implement the embedded telemetry service that runs within the main enterprise se
 #### 5.3.2 OpenHands - Server Integration
 
 - [ ] Update `enterprise/saas_server.py` to register telemetry lifespan
-- [ ] Update `openhands/server/app.py` lifespans list (if needed)
+- [x] Update `openhands/server/app.py` lifespans list (if needed)
 - [ ] `enterprise/tests/integration/test_telemetry_embedded.py` - End-to-end integration tests
 
 **Integration Points**:
@@ -1190,16 +1190,16 @@ Implement the embedded telemetry service that runs within the main enterprise se
 
 #### 5.3.3 OpenHands - Integration Tests
 
-- [ ] `enterprise/tests/integration/test_telemetry_flow.py` - Full collection and upload cycle
-- [ ] Test startup/shutdown behavior
-- [ ] Test two-phase scheduling:
-  - [ ] Bootstrap phase: 3-minute check intervals before first user
-  - [ ] Phase transition: Immediate upload when first user authenticates
-  - [ ] Normal phase: 1-hour check intervals after identity established
-  - [ ] Identity detection: `_is_identity_established()` logic
-- [ ] Test interval timing and database state
-- [ ] Test Replicated API integration (mocked)
-- [ ] Test error handling and recovery (falls back to bootstrap interval)
+- [x] `enterprise/tests/integration/test_telemetry_flow.py` - Full collection and upload cycle
+- [x] Test startup/shutdown behavior
+- [x] Test two-phase scheduling:
+  - [x] Bootstrap phase: 3-minute check intervals before first user
+  - [x] Phase transition: Immediate upload when first user authenticates
+  - [x] Normal phase: 1-hour check intervals after identity established
+  - [x] Identity detection: `_is_identity_established()` logic
+- [x] Test interval timing and database state
+- [x] Test Replicated API integration (mocked)
+- [x] Test error handling and recovery (falls back to bootstrap interval)
 
 **Demo**: Telemetry service starts automatically with the enterprise server. New installations become visible within 3 minutes of first user login. Established installations collect metrics weekly and upload daily to Replicated. The service cannot be disabled without code modification.
 
