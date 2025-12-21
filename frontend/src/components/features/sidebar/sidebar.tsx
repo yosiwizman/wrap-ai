@@ -13,6 +13,7 @@ import { useLogout } from "#/hooks/mutation/use-logout";
 import { useConfig } from "#/hooks/query/use-config";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { MicroagentManagementButton } from "#/components/shared/buttons/microagent-management-button";
+import { GitHubIssuesPRsButton } from "#/components/shared/buttons/github-issues-prs-button";
 import { cn } from "#/utils/utils";
 
 export function Sidebar() {
@@ -83,6 +84,9 @@ export function Sidebar() {
               disabled={settings?.email_verified === false}
             />
             <MicroagentManagementButton
+              disabled={settings?.email_verified === false}
+            />
+            <GitHubIssuesPRsButton
               disabled={settings?.email_verified === false}
             />
           </div>
