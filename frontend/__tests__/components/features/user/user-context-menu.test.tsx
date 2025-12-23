@@ -68,15 +68,33 @@ describe("UserContextMenu", () => {
     expect(screen.queryByText("ORG$MANAGE_ACCOUNT")).not.toBeInTheDocument();
   });
 
-  it("should render navigation items from SAAS_NAV_ITEMS (except organization-members/org)", () => {
+  it("should render navigation items from SAAS_NAV_ITEMS (except organization-members/org)", async () => {
+    vi.spyOn(OptionService, "getConfig").mockResolvedValue({
+      APP_MODE: "saas",
+      GITHUB_CLIENT_ID: "test",
+      POSTHOG_CLIENT_KEY: "test",
+      FEATURE_FLAGS: {
+        ENABLE_BILLING: false,
+        HIDE_LLM_SETTINGS: false,
+        HIDE_BILLING: false,
+        ENABLE_JIRA: false,
+        ENABLE_JIRA_DC: false,
+        ENABLE_LINEAR: false,
+      },
+    });
+
     renderUserContextMenu({ type: "user", onClose: vi.fn });
 
-    // Verify that navigation items are rendered (except organization-members/org which are filtered out)
-    SAAS_NAV_ITEMS.filter(
+    // Wait for config to load and verify that navigation items are rendered (except organization-members/org which are filtered out)
+    const expectedItems = SAAS_NAV_ITEMS.filter(
       (item) =>
         item.to !== "/settings/org-members" && item.to !== "/settings/org",
-    ).forEach((item) => {
-      expect(screen.getByText(item.text)).toBeInTheDocument();
+    );
+
+    await waitFor(() => {
+      expectedItems.forEach((item) => {
+        expect(screen.getByText(item.text)).toBeInTheDocument();
+      });
     });
   });
 
@@ -224,12 +242,28 @@ describe("UserContextMenu", () => {
     expect(logoutSpy).toHaveBeenCalledOnce();
   });
 
-  it("should have correct navigation links for nav items", () => {
+  it("should have correct navigation links for nav items", async () => {
+    vi.spyOn(OptionService, "getConfig").mockResolvedValue({
+      APP_MODE: "saas",
+      GITHUB_CLIENT_ID: "test",
+      POSTHOG_CLIENT_KEY: "test",
+      FEATURE_FLAGS: {
+        ENABLE_BILLING: false,
+        HIDE_LLM_SETTINGS: false,
+        HIDE_BILLING: false,
+        ENABLE_JIRA: false,
+        ENABLE_JIRA_DC: false,
+        ENABLE_LINEAR: false,
+      },
+    });
+
     renderUserContextMenu({ type: "user", onClose: vi.fn });
 
-    // Test a few representative nav items have the correct href
-    const userLink = screen.getByText("SETTINGS$NAV_USER").closest("a");
-    expect(userLink).toHaveAttribute("href", "/settings/user");
+    // Wait for config to load and test a few representative nav items have the correct href
+    await waitFor(() => {
+      const userLink = screen.getByText("SETTINGS$NAV_USER").closest("a");
+      expect(userLink).toHaveAttribute("href", "/settings/user");
+    });
 
     const billingLink = screen.getByText("SETTINGS$NAV_BILLING").closest("a");
     expect(billingLink).toHaveAttribute("href", "/settings/billing");

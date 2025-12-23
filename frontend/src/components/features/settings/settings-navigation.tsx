@@ -9,17 +9,12 @@ import { SettingsDropdownInput } from "./settings-dropdown-input";
 import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { useOrganizations } from "#/hooks/query/use-organizations";
 import { useMe } from "#/hooks/query/use-me";
-
-interface NavigationItem {
-  to: string;
-  icon: React.ReactNode;
-  text: string;
-}
+import { SettingsNavItem } from "#/constants/settings-nav";
 
 interface SettingsNavigationProps {
   isMobileMenuOpen: boolean;
   onCloseMobileMenu: () => void;
-  navigationItems: NavigationItem[];
+  navigationItems: SettingsNavItem[];
 }
 
 export function SettingsNavigation({
@@ -44,7 +39,6 @@ export function SettingsNavigation({
           onClick={onCloseMobileMenu}
         />
       )}
-
       {/* Navigation sidebar */}
       <nav
         data-testid="settings-navbar"

@@ -17,8 +17,7 @@ import { useSelectedOrganizationId } from "#/context/use-selected-organization";
 import { useOrganizations } from "#/hooks/query/use-organizations";
 import { SettingsDropdownInput } from "../settings/settings-dropdown-input";
 import { I18nKey } from "#/i18n/declaration";
-import { SAAS_NAV_ITEMS, OSS_NAV_ITEMS } from "#/constants/settings-nav";
-import { useConfig } from "#/hooks/query/use-config";
+import { useSettingsNavItems } from "#/hooks/use-settings-nav-items";
 import DocumentIcon from "#/icons/document.svg?react";
 
 interface TempButtonProps {
@@ -58,23 +57,15 @@ export function UserContextMenu({ type, onClose }: UserContextMenuProps) {
   const { orgId, setOrgId } = useSelectedOrganizationId();
   const { data: organizations } = useOrganizations();
   const { mutate: logout } = useLogout();
-  const { data: config } = useConfig();
   const ref = useClickOutsideElement<HTMLDivElement>(onClose);
 
-  const isOss = config?.APP_MODE === "oss";
-  // Filter out organization members/org nav items since they're already handled separately in the menu
-  let navItems = (isOss ? OSS_NAV_ITEMS : SAAS_NAV_ITEMS).filter(
+  // Get nav items from the shared hook (already filtered by feature flags)
+  // Then filter out org-related items since they're handled separately in this menu
+  const settingsNavItems = useSettingsNavItems();
+  const navItems = settingsNavItems.filter(
     (item) =>
       item.to !== "/settings/org-members" && item.to !== "/settings/org",
   );
-  // Hide LLM settings when the feature flag is enabled
-  if (config?.FEATURE_FLAGS?.HIDE_LLM_SETTINGS) {
-    navItems = navItems.filter((item) => item.to !== "/settings");
-  }
-  // Hide billing when the feature flag is enabled
-  if (config?.FEATURE_FLAGS?.HIDE_BILLING) {
-    navItems = navItems.filter((item) => item.to !== "/settings/billing");
-  }
 
   const [inviteMemberModalIsOpen, setInviteMemberModalIsOpen] =
     React.useState(false);
