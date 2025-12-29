@@ -511,6 +511,10 @@ async def delete_conversation(
     if v1_result is not None:
         return v1_result
 
+    # Close connections
+    await db_session.close()
+    await httpx_client.aclose()
+
     # V0 conversation logic
     return await _delete_v0_conversation(conversation_id, user_id)
 
@@ -552,11 +556,8 @@ async def _try_delete_v1_conversation(
                     httpx_client,
                 )
             )
-    except (ValueError, TypeError):
-        # Not a valid UUID, continue with V0 logic
-        pass
     except Exception:
-        # Some other error, continue with V0 logic
+        # Continue with V0 logic
         pass
 
     return result
@@ -1527,4 +1528,5 @@ def _to_conversation_info(app_conversation: AppConversation) -> ConversationInfo
         sub_conversation_ids=[
             sub_id.hex for sub_id in app_conversation.sub_conversation_ids
         ],
+        public=app_conversation.public,
     )

@@ -22,6 +22,7 @@ from openhands.app_server.app_conversation.app_conversation_service import (
 )
 from openhands.app_server.app_conversation.skill_loader import (
     load_global_skills,
+    load_org_skills,
     load_repo_skills,
     load_sandbox_skills,
     merge_skills,
@@ -57,7 +58,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
     init_git_in_empty_workspace: bool
     user_context: UserContext
 
-    async def _load_and_merge_all_skills(
+    async def load_and_merge_all_skills(
         self,
         sandbox: SandboxInfo,
         remote_workspace: AsyncRemoteWorkspace,
@@ -94,13 +95,20 @@ class AppConversationServiceBase(AppConversationService, ABC):
             except Exception as e:
                 _logger.warning(f'Failed to load user skills: {str(e)}')
                 user_skills = []
+
+            # Load organization-level skills
+            org_skills = await load_org_skills(
+                remote_workspace, selected_repository, working_dir, self.user_context
+            )
+
             repo_skills = await load_repo_skills(
                 remote_workspace, selected_repository, working_dir
             )
 
             # Merge all skills (later lists override earlier ones)
+            # Precedence: sandbox < global < user < org < repo
             all_skills = merge_skills(
-                [sandbox_skills, global_skills, user_skills, repo_skills]
+                [sandbox_skills, global_skills, user_skills, org_skills, repo_skills]
             )
 
             _logger.info(
@@ -161,7 +169,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
             Updated agent with skills loaded into context
         """
         # Load and merge all skills
-        all_skills = await self._load_and_merge_all_skills(
+        all_skills = await self.load_and_merge_all_skills(
             sandbox, remote_workspace, selected_repository, working_dir
         )
 
@@ -190,7 +198,7 @@ class AppConversationServiceBase(AppConversationService, ABC):
 
         task.status = AppConversationStartTaskStatus.SETTING_UP_SKILLS
         yield task
-        await self._load_and_merge_all_skills(
+        await self.load_and_merge_all_skills(
             sandbox,
             workspace,
             task.request.selected_repository,
