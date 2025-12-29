@@ -222,21 +222,16 @@ class GithubIssue(ResolverViewInterface):
         logger.info(
             f'[GitHub V1]: User flag found for {self.user_info.keycloak_user_id} is {v1_enabled}'
         )
+        v1_enabled = True
         if v1_enabled:
-            try:
-                # Use V1 app conversation service
-                await self._create_v1_conversation(
-                    jinja_env, saas_user_auth, conversation_metadata
-                )
-                return
-
-            except Exception as e:
-                logger.warning(f'Error checking V1 settings, falling back to V0: {e}')
-
-        # Use existing V0 conversation service
-        await self._create_v0_conversation(
-            jinja_env, git_provider_tokens, conversation_metadata
-        )
+            # Use V1 app conversation service
+            await self._create_v1_conversation(
+                jinja_env, saas_user_auth, conversation_metadata
+            )
+        else:
+            await self._create_v0_conversation(
+                jinja_env, git_provider_tokens, conversation_metadata
+            )
 
     async def _create_v0_conversation(
         self,
