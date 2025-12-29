@@ -321,7 +321,7 @@ class GithubIssue(ResolverViewInterface):
 
     def _create_github_v1_callback_processor(self):
         """Create a V1 callback processor for GitHub integration."""
-        from openhands.app_server.event_callback.github_v1_callback_processor import (
+        from integrations.github.github_v1_callback_processor import (
             GithubV1CallbackProcessor,
         )
 
@@ -358,8 +358,7 @@ class GithubIssueComment(GithubIssue):
             issue_number=self.issue_number,
             issue_title=self.title,
             issue_body=self.description,
-            previous_comments=self.previous_comments,
-            branch_name=self._get_branch_name(),
+            previous_comments=self.previous_comments
         )
 
         return user_instructions, conversation_instructions

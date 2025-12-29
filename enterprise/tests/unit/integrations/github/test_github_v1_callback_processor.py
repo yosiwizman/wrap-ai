@@ -24,7 +24,7 @@ from openhands.app_server.event_callback.event_callback_models import EventCallb
 from openhands.app_server.event_callback.event_callback_result_models import (
     EventCallbackResultStatus,
 )
-from openhands.app_server.event_callback.github_v1_callback_processor import (
+from integrations.github.github_v1_callback_processor import (
     GithubV1CallbackProcessor,
 )
 from openhands.app_server.sandbox.sandbox_models import (
