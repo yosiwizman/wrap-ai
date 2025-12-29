@@ -804,7 +804,7 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
-                v1=False,
+                v1_enabled=False,
             )
 
         elif GithubFactory.is_issue_comment(message):
@@ -830,7 +830,7 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
-                v1=False,
+                v1_enabled=False,
             )
 
         elif GithubFactory.is_pr_comment(message):
@@ -872,7 +872,7 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
-                v1=False,
+                v1_enabled=False,
             )
 
         elif GithubFactory.is_inline_pr_comment(message):
@@ -906,7 +906,7 @@ class GithubFactory:
                 title='',
                 description='',
                 previous_comments=[],
-                v1=False,
+                v1_enabled=False,
             )
 
         else:
