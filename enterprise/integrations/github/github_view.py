@@ -358,7 +358,7 @@ class GithubIssueComment(GithubIssue):
             issue_number=self.issue_number,
             issue_title=self.title,
             issue_body=self.description,
-            previous_comments=self.previous_comments
+            previous_comments=self.previous_comments,
         )
 
         return user_instructions, conversation_instructions

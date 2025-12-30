@@ -1,11 +1,12 @@
 import logging
-import os
 from typing import Any
 from uuid import UUID
 
 import httpx
 from github import Github, GithubIntegration
+from integrations.utils import CONVERSATION_URL, get_summary_instruction
 from pydantic import Field
+from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 
 from openhands.agent_server.models import AskAgentRequest, AskAgentResponse
 from openhands.app_server.event_callback.event_callback_models import (
@@ -20,12 +21,9 @@ from openhands.app_server.event_callback.util import (
     ensure_conversation_found,
     ensure_running_sandbox,
     get_agent_server_url_from_sandbox,
-    get_conversation_url,
-    get_prompt_template,
 )
 from openhands.sdk import Event
 from openhands.sdk.event import ConversationStateUpdateEvent
-from server.auth.constants import GITHUB_APP_CLIENT_ID, GITHUB_APP_PRIVATE_KEY
 
 _logger = logging.getLogger(__name__)
 
@@ -88,7 +86,7 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
                 ):
                     await self._post_summary_to_github(
                         f'OpenHands encountered an error: **{str(e)}**.\n\n'
-                        f'[See the conversation]({get_conversation_url().format(conversation_id)})'
+                        f'[See the conversation]({CONVERSATION_URL.format(conversation_id)})'
                         'for more information.'
                     )
             except Exception as post_error:
@@ -271,16 +269,16 @@ class GithubV1CallbackProcessor(EventCallbackProcessor):
                 app_conversation_info.sandbox_id,
             )
 
-            assert sandbox.session_api_key is not None, (
-                f'No session API key for sandbox: {sandbox.id}'
-            )
+            assert (
+                sandbox.session_api_key is not None
+            ), f'No session API key for sandbox: {sandbox.id}'
 
             # 3. URL + instruction
             agent_server_url = get_agent_server_url_from_sandbox(sandbox)
             agent_server_url = get_agent_server_url_from_sandbox(sandbox)
 
             # Prepare message based on agent state
-            message_content = get_prompt_template('summary_prompt.j2')
+            message_content = get_summary_instruction()
 
             # Ask the agent and return the response text
             return await self._ask_question(
