@@ -5,16 +5,14 @@ Store class for managing users.
 import uuid
 from typing import Optional
 
-from openhands.utils.async_utils import GENERAL_TIMEOUT, call_async_from_sync
-from sqlalchemy import text
-from sqlalchemy.orm import joinedload
-
 from server.constants import (
     LITE_LLM_API_URL,
     ORG_SETTINGS_VERSION,
     PERSONAL_WORKSPACE_VERSION_TO_MODEL,
 )
 from server.logger import logger
+from sqlalchemy import text
+from sqlalchemy.orm import joinedload
 from storage.database import session_maker
 from storage.encrypt_utils import decrypt_legacy_model
 from storage.org import Org
@@ -22,6 +20,8 @@ from storage.org_member import OrgMember
 from storage.role_store import RoleStore
 from storage.user import User
 from storage.user_settings import UserSettings
+
+from openhands.utils.async_utils import GENERAL_TIMEOUT, call_async_from_sync
 
 
 class UserStore:

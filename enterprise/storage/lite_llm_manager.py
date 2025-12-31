@@ -22,6 +22,10 @@ from storage.user_settings import UserSettings
 
 from openhands.server.settings import Settings
 from openhands.utils.async_utils import call_sync_from_async
+from openhands.utils.http_session import httpx_verify_option
+
+# Timeout in seconds for BYOR key verification requests to LiteLLM
+BYOR_KEY_VERIFICATION_TIMEOUT = 5.0
 
 # A very large number to represent "unlimited" until LiteLLM fixes their unlimited update bug.
 UNLIMITED_BUDGET_SETTING = 1000000000.0
@@ -602,6 +606,68 @@ class LiteLlmManager:
             },
         )
         return key
+
+    @staticmethod
+    async def verify_key(key: str, user_id: str) -> bool:
+        """Verify that a key is valid in LiteLLM by making a lightweight API call.
+
+        Args:
+            key: The key to verify
+            user_id: The user ID for logging purposes
+
+        Returns:
+            True if the key is verified as valid, False if verification fails or key is invalid.
+            Returns False on network errors/timeouts to ensure we don't return potentially invalid keys.
+        """
+        if not (LITE_LLM_API_URL and key):
+            return False
+
+        try:
+            async with httpx.AsyncClient(
+                verify=httpx_verify_option(),
+                timeout=BYOR_KEY_VERIFICATION_TIMEOUT,
+            ) as client:
+                # Make a lightweight request to verify the key
+                # Using /v1/models endpoint as it's lightweight and requires authentication
+                response = await client.get(
+                    f'{LITE_LLM_API_URL}/v1/models',
+                    headers={
+                        'Authorization': f'Bearer {key}',
+                    },
+                )
+
+                # Only 200 status code indicates valid key
+                if response.status_code == 200:
+                    logger.debug(
+                        'BYOR key verification successful',
+                        extra={'user_id': user_id},
+                    )
+                    return True
+
+                # All other status codes (401, 403, 500, etc.) are treated as invalid
+                # This includes authentication errors and server errors
+                logger.warning(
+                    'BYOR key verification failed - treating as invalid',
+                    extra={
+                        'user_id': user_id,
+                        'status_code': response.status_code,
+                        'key_prefix': key[:10] + '...' if len(key) > 10 else key,
+                    },
+                )
+                return False
+
+        except (httpx.TimeoutException, Exception) as e:
+            # Any exception (timeout, network error, etc.) means we can't verify
+            # Return False to trigger regeneration rather than returning potentially invalid key
+            logger.warning(
+                'BYOR key verification error - treating as invalid to ensure key validity',
+                extra={
+                    'user_id': user_id,
+                    'error': str(e),
+                    'error_type': type(e).__name__,
+                },
+            )
+            return False
 
     @staticmethod
     async def _get_key_info(

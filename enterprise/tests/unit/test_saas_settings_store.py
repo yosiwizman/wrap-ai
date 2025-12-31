@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import SecretStr
+from server.constants import get_default_litellm_model
 
 from openhands.core.config.openhands_config import OpenHandsConfig
 from openhands.server.settings import Settings

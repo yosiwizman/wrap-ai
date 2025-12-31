@@ -2,12 +2,6 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
-from server.config import get_config
-from server.constants import (
-    BYOR_KEY_VERIFICATION_TIMEOUT,
-    LITE_LLM_API_KEY,
-    LITE_LLM_API_URL,
-)
 from storage.api_key_store import ApiKeyStore
 from storage.lite_llm_manager import LiteLlmManager
 from storage.org_member import OrgMember
@@ -104,70 +98,6 @@ async def generate_byor_key(user_id: str) -> str | None:
             extra={'user_id': user_id, 'error': str(e)},
         )
         return None
-
-
-async def verify_byor_key_in_litellm(byor_key: str, user_id: str) -> bool:
-    """Verify that a BYOR key is valid in LiteLLM by making a lightweight API call.
-
-    Args:
-        byor_key: The BYOR key to verify
-        user_id: The user ID for logging purposes
-
-    Returns:
-        True if the key is verified as valid, False if verification fails or key is invalid.
-        Returns False on network errors/timeouts to ensure we don't return potentially invalid keys.
-    """
-    if not (LITE_LLM_API_URL and byor_key):
-        return False
-
-    try:
-        async with httpx.AsyncClient(
-            verify=httpx_verify_option(),
-            timeout=BYOR_KEY_VERIFICATION_TIMEOUT,
-        ) as client:
-            # Make a lightweight request to verify the key
-            # Using /v1/models endpoint as it's lightweight and requires authentication
-            response = await client.get(
-                f'{LITE_LLM_API_URL}/v1/models',
-                headers={
-                    'Authorization': f'Bearer {byor_key}',
-                },
-            )
-
-            # Only 200 status code indicates valid key
-            if response.status_code == 200:
-                logger.debug(
-                    'BYOR key verification successful',
-                    extra={'user_id': user_id},
-                )
-                return True
-
-            # All other status codes (401, 403, 500, etc.) are treated as invalid
-            # This includes authentication errors and server errors
-            logger.warning(
-                'BYOR key verification failed - treating as invalid',
-                extra={
-                    'user_id': user_id,
-                    'status_code': response.status_code,
-                    'key_prefix': byor_key[:10] + '...'
-                    if len(byor_key) > 10
-                    else byor_key,
-                },
-            )
-            return False
-
-    except (httpx.TimeoutException, Exception) as e:
-        # Any exception (timeout, network error, etc.) means we can't verify
-        # Return False to trigger regeneration rather than returning potentially invalid key
-        logger.warning(
-            'BYOR key verification error - treating as invalid to ensure key validity',
-            extra={
-                'user_id': user_id,
-                'error': str(e),
-                'error_type': type(e).__name__,
-            },
-        )
-        return False
 
 
 async def delete_byor_key_from_litellm(user_id: str, byor_key: str) -> bool:
@@ -331,7 +261,7 @@ async def get_llm_api_key_for_byor(user_id: str = Depends(get_user_id)):
         byor_key = await get_byor_key_from_db(user_id)
         if byor_key:
             # Validate that the key is actually registered in LiteLLM
-            is_valid = await verify_byor_key_in_litellm(byor_key, user_id)
+            is_valid = await LiteLlmManager.verify_key(byor_key, user_id)
             if is_valid:
                 return {'key': byor_key}
             else:

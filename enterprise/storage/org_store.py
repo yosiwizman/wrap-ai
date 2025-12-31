@@ -5,19 +5,19 @@ Store class for managing organizations.
 from typing import Optional
 from uuid import UUID
 
-from openhands.core.logger import openhands_logger as logger
-from openhands.storage.data_models.settings import Settings
-from sqlalchemy.orm import joinedload
-
 from server.constants import (
     LITE_LLM_API_URL,
     ORG_SETTINGS_VERSION,
     get_default_litellm_model,
 )
+from sqlalchemy.orm import joinedload
 from storage.database import session_maker
 from storage.org import Org
 from storage.user import User
 from storage.user_settings import UserSettings
+
+from openhands.core.logger import openhands_logger as logger
+from openhands.storage.data_models.settings import Settings
 
 
 class OrgStore:
