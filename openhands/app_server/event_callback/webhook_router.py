@@ -188,7 +188,7 @@ async def get_secret(
         if user_id:
             user_auth = await get_user_auth_for_user(user_id)
         else:
-            # OpenHands mode - use default user auth
+            # OpenHands (OSS mode) - use default user auth
             user_auth = DefaultUserAuth()
 
         # Create UserContext directly
