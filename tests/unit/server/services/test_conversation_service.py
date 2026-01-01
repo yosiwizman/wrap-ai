@@ -140,7 +140,7 @@ async def test_setup_without_tokens_non_saas_uses_user_secrets(mock_settings):
                 mock_secrets_store.load = AsyncMock(return_value=mock_user_secrets)
                 mock_secrets_store_cls.return_value = mock_secrets_store
 
-                mock_server_config.app_mode = AppMode.OSS
+                mock_server_config.app_mode = AppMode.OPENHANDS
 
                 # Call without endpoint tokens
                 result = await setup_init_conversation_settings(
