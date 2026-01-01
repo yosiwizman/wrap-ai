@@ -102,9 +102,9 @@ async def test_setup_with_provided_tokens_uses_real_tokens(
 
 @pytest.mark.asyncio
 async def test_setup_without_tokens_non_saas_uses_user_secrets(mock_settings):
-    """Test that OSS mode uses user_secrets.provider_tokens when no tokens provided.
+    """Test that OpenHands mode uses user_secrets.provider_tokens when no tokens provided.
 
-    This test verifies OSS mode backward compatibility - tokens come from local config, not endpoint.
+    This test verifies OpenHands mode backward compatibility - tokens come from local config, not endpoint.
     """
     user_id = 'test_user_456'
     conversation_id = 'test_conv_123'
