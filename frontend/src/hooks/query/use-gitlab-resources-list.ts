@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { IntegrationService } from "#/api/integration-service/integration-service.api";
+import { integrationService } from "#/api/integration-service/integration-service.api";
 import type { GitLabResourcesResponse } from "#/api/integration-service/integration-service.types";
 
 /**
@@ -8,7 +8,7 @@ import type { GitLabResourcesResponse } from "#/api/integration-service/integrat
 export function useGitLabResources(enabled: boolean = true) {
   return useQuery<GitLabResourcesResponse>({
     queryKey: ["gitlab-resources"],
-    queryFn: () => IntegrationService.getGitLabResources(),
+    queryFn: () => integrationService.getGitLabResources(),
     enabled,
     staleTime: 1000 * 60 * 2, // 2 minutes
     gcTime: 1000 * 60 * 10, // 10 minutes

@@ -3,8 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GitLabWebhookManager } from "#/components/features/settings/git-settings/gitlab-webhook-manager";
-import { IntegrationService } from "#/api/integration-service/integration-service.api";
-import type { GitLabResource } from "#/api/integration-service/integration-service.types";
+import { integrationService } from "#/api/integration-service/integration-service.api";
+import type {
+  GitLabResource,
+  ResourceInstallationResult,
+} from "#/api/integration-service/integration-service.types";
 import * as ToastHandlers from "#/utils/custom-toast-handlers";
 
 // Mock react-i18next
@@ -12,14 +15,6 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => key,
   }),
-}));
-
-// Mock the IntegrationService
-vi.mock("#/api/integration-service/integration-service.api", () => ({
-  IntegrationService: {
-    getGitLabResources: vi.fn(),
-    reinstallGitLabWebhook: vi.fn(),
-  },
 }));
 
 // Mock toast handlers
@@ -72,7 +67,7 @@ describe("GitLabWebhookManager", () => {
 
   it("should display loading state when fetching resources", async () => {
     // Arrange
-    vi.spyOn(IntegrationService, "getGitLabResources").mockImplementation(
+    vi.spyOn(integrationService, "getGitLabResources").mockImplementation(
       () => new Promise(() => {}), // Never resolves
     );
 
@@ -87,7 +82,7 @@ describe("GitLabWebhookManager", () => {
 
   it("should display error state when fetching fails", async () => {
     // Arrange
-    vi.spyOn(IntegrationService, "getGitLabResources").mockRejectedValue(
+    vi.spyOn(integrationService, "getGitLabResources").mockRejectedValue(
       new Error("Failed to fetch"),
     );
 
@@ -104,7 +99,7 @@ describe("GitLabWebhookManager", () => {
 
   it("should display no resources message when list is empty", async () => {
     // Arrange
-    vi.spyOn(IntegrationService, "getGitLabResources").mockResolvedValue({
+    vi.spyOn(integrationService, "getGitLabResources").mockResolvedValue({
       resources: [],
     });
 
@@ -121,7 +116,7 @@ describe("GitLabWebhookManager", () => {
 
   it("should display resources table when resources are available", async () => {
     // Arrange
-    vi.spyOn(IntegrationService, "getGitLabResources").mockResolvedValue({
+    vi.spyOn(integrationService, "getGitLabResources").mockResolvedValue({
       resources: mockResources,
     });
 
@@ -140,7 +135,7 @@ describe("GitLabWebhookManager", () => {
 
   it("should display correct resource types in table", async () => {
     // Arrange
-    vi.spyOn(IntegrationService, "getGitLabResources").mockResolvedValue({
+    vi.spyOn(integrationService, "getGitLabResources").mockResolvedValue({
       resources: mockResources,
     });
 
@@ -158,7 +153,7 @@ describe("GitLabWebhookManager", () => {
 
   it("should disable reinstall button when webhook is already installed", async () => {
     // Arrange
-    vi.spyOn(IntegrationService, "getGitLabResources").mockResolvedValue({
+    vi.spyOn(integrationService, "getGitLabResources").mockResolvedValue({
       resources: [
         {
           id: "10",
@@ -177,18 +172,16 @@ describe("GitLabWebhookManager", () => {
 
     // Assert
     await waitFor(() => {
-      const buttons = screen.getAllByText("GITLAB$WEBHOOK_REINSTALL");
-      const reinstallButton = buttons.find((btn) => {
-        const button = btn.closest("button");
-        return button && button.hasAttribute("disabled");
-      });
-      expect(reinstallButton).toBeInTheDocument();
+      const reinstallButton = screen.getByTestId(
+        "reinstall-webhook-button-group:10",
+      );
+      expect(reinstallButton).toBeDisabled();
     });
   });
 
   it("should enable reinstall button when webhook is not installed", async () => {
     // Arrange
-    vi.spyOn(IntegrationService, "getGitLabResources").mockResolvedValue({
+    vi.spyOn(integrationService, "getGitLabResources").mockResolvedValue({
       resources: [
         {
           id: "1",
@@ -207,28 +200,19 @@ describe("GitLabWebhookManager", () => {
 
     // Assert
     await waitFor(() => {
-      const buttons = screen.getAllByText("GITLAB$WEBHOOK_REINSTALL");
-      const reinstallButton = buttons.find((btn) => {
-        const button = btn.closest("button");
-        return button && !button.hasAttribute("disabled");
-      });
-      expect(reinstallButton).toBeInTheDocument();
+      const reinstallButton = screen.getByTestId(
+        "reinstall-webhook-button-project:1",
+      );
+      expect(reinstallButton).not.toBeDisabled();
     });
   });
 
   it("should call reinstall service when reinstall button is clicked", async () => {
     // Arrange
     const user = userEvent.setup();
-    const reinstallSpy = vi
-      .spyOn(IntegrationService, "reinstallGitLabWebhook")
-      .mockResolvedValue({
-        resource_id: "1",
-        resource_type: "project",
-        success: true,
-        error: null,
-      });
+    const reinstallSpy = vi.spyOn(integrationService, "reinstallGitLabWebhook");
 
-    vi.spyOn(IntegrationService, "getGitLabResources").mockResolvedValue({
+    vi.spyOn(integrationService, "getGitLabResources").mockResolvedValue({
       resources: [
         {
           id: "1",
@@ -244,14 +228,18 @@ describe("GitLabWebhookManager", () => {
 
     // Act
     renderComponent();
-    const reinstallButton = await screen.findByText("GITLAB$WEBHOOK_REINSTALL");
+    const reinstallButton = await screen.findByTestId(
+      "reinstall-webhook-button-project:1",
+    );
     await user.click(reinstallButton);
 
     // Assert
     await waitFor(() => {
       expect(reinstallSpy).toHaveBeenCalledWith({
-        type: "project",
-        id: "1",
+        resource: {
+          type: "project",
+          id: "1",
+        },
       });
     });
   });
@@ -259,16 +247,18 @@ describe("GitLabWebhookManager", () => {
   it("should show loading state on button during reinstallation", async () => {
     // Arrange
     const user = userEvent.setup();
-    let resolveReinstall: (value: any) => void;
-    const reinstallPromise = new Promise((resolve) => {
-      resolveReinstall = resolve;
-    });
-
-    vi.spyOn(IntegrationService, "reinstallGitLabWebhook").mockReturnValue(
-      reinstallPromise as any,
+    let resolveReinstall: (value: ResourceInstallationResult) => void;
+    const reinstallPromise = new Promise<ResourceInstallationResult>(
+      (resolve) => {
+        resolveReinstall = resolve;
+      },
     );
 
-    vi.spyOn(IntegrationService, "getGitLabResources").mockResolvedValue({
+    vi.spyOn(integrationService, "reinstallGitLabWebhook").mockReturnValue(
+      reinstallPromise,
+    );
+
+    vi.spyOn(integrationService, "getGitLabResources").mockResolvedValue({
       resources: [
         {
           id: "1",
@@ -284,7 +274,9 @@ describe("GitLabWebhookManager", () => {
 
     // Act
     renderComponent();
-    const reinstallButton = await screen.findByText("GITLAB$WEBHOOK_REINSTALL");
+    const reinstallButton = await screen.findByTestId(
+      "reinstall-webhook-button-project:1",
+    );
     await user.click(reinstallButton);
 
     // Assert
@@ -307,14 +299,14 @@ describe("GitLabWebhookManager", () => {
     // Arrange
     const user = userEvent.setup();
     const errorMessage = "Permission denied";
-    vi.spyOn(IntegrationService, "reinstallGitLabWebhook").mockResolvedValue({
+    vi.spyOn(integrationService, "reinstallGitLabWebhook").mockResolvedValue({
       resource_id: "1",
       resource_type: "project",
       success: false,
       error: errorMessage,
     });
 
-    vi.spyOn(IntegrationService, "getGitLabResources").mockResolvedValue({
+    vi.spyOn(integrationService, "getGitLabResources").mockResolvedValue({
       resources: [
         {
           id: "1",
@@ -330,7 +322,9 @@ describe("GitLabWebhookManager", () => {
 
     // Act
     renderComponent();
-    const reinstallButton = await screen.findByText("GITLAB$WEBHOOK_REINSTALL");
+    const reinstallButton = await screen.findByTestId(
+      "reinstall-webhook-button-project:1",
+    );
     await user.click(reinstallButton);
 
     // Assert
@@ -347,44 +341,32 @@ describe("GitLabWebhookManager", () => {
       "displaySuccessToast",
     );
 
-    vi.spyOn(IntegrationService, "reinstallGitLabWebhook").mockResolvedValue({
+    vi.spyOn(integrationService, "reinstallGitLabWebhook").mockResolvedValue({
       resource_id: "1",
       resource_type: "project",
       success: true,
       error: null,
     });
 
-    vi.spyOn(IntegrationService, "getGitLabResources")
-      .mockResolvedValueOnce({
-        resources: [
-          {
-            id: "1",
-            name: "Test Project",
-            full_path: "user/test-project",
-            type: "project",
-            webhook_installed: false,
-            webhook_uuid: null,
-            last_synced: null,
-          },
-        ],
-      })
-      .mockResolvedValueOnce({
-        resources: [
-          {
-            id: "1",
-            name: "Test Project",
-            full_path: "user/test-project",
-            type: "project",
-            webhook_installed: true,
-            webhook_uuid: "new-uuid",
-            last_synced: null,
-          },
-        ],
-      });
+    vi.spyOn(integrationService, "getGitLabResources").mockResolvedValue({
+      resources: [
+        {
+          id: "1",
+          name: "Test Project",
+          full_path: "user/test-project",
+          type: "project",
+          webhook_installed: false,
+          webhook_uuid: null,
+          last_synced: null,
+        },
+      ],
+    });
 
     // Act
     renderComponent();
-    const reinstallButton = await screen.findByText("GITLAB$WEBHOOK_REINSTALL");
+    const reinstallButton = await screen.findByTestId(
+      "reinstall-webhook-button-project:1",
+    );
     await user.click(reinstallButton);
 
     // Assert
@@ -401,11 +383,11 @@ describe("GitLabWebhookManager", () => {
     const displayErrorToastSpy = vi.spyOn(ToastHandlers, "displayErrorToast");
     const errorMessage = "Network error";
 
-    vi.spyOn(IntegrationService, "reinstallGitLabWebhook").mockRejectedValue(
+    vi.spyOn(integrationService, "reinstallGitLabWebhook").mockRejectedValue(
       new Error(errorMessage),
     );
 
-    vi.spyOn(IntegrationService, "getGitLabResources").mockResolvedValue({
+    vi.spyOn(integrationService, "getGitLabResources").mockResolvedValue({
       resources: [
         {
           id: "1",
@@ -421,7 +403,9 @@ describe("GitLabWebhookManager", () => {
 
     // Act
     renderComponent();
-    const reinstallButton = await screen.findByText("GITLAB$WEBHOOK_REINSTALL");
+    const reinstallButton = await screen.findByTestId(
+      "reinstall-webhook-button-project:1",
+    );
     await user.click(reinstallButton);
 
     // Assert

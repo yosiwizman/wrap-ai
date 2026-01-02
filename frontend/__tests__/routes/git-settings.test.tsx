@@ -13,7 +13,7 @@ import { MOCK_DEFAULT_USER_SETTINGS } from "#/mocks/handlers";
 import { GetConfigResponse } from "#/api/option-service/option.types";
 import * as ToastHandlers from "#/utils/custom-toast-handlers";
 import { SecretsService } from "#/api/secrets-service";
-import { IntegrationService } from "#/api/integration-service/integration-service.api";
+import { integrationService } from "#/api/integration-service/integration-service.api";
 
 const VALID_OSS_CONFIG: GetConfigResponse = {
   APP_MODE: "oss",
@@ -638,7 +638,10 @@ describe("GitLab Webhook Manager Integration", () => {
     // Arrange
     const getConfigSpy = vi.spyOn(OptionService, "getConfig");
     const getSettingsSpy = vi.spyOn(SettingsService, "getSettings");
-    const getResourcesSpy = vi.spyOn(IntegrationService, "getGitLabResources");
+    const getResourcesSpy = vi.spyOn(
+      integrationService,
+      "getGitLabResources",
+    );
 
     getConfigSpy.mockResolvedValue({
       ...VALID_SAAS_CONFIG,

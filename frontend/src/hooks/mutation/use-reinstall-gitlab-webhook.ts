@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { IntegrationService } from "#/api/integration-service/integration-service.api";
+import { integrationService } from "#/api/integration-service/integration-service.api";
 import type {
   ResourceIdentifier,
   ResourceInstallationResult,
@@ -25,7 +25,7 @@ export function useReinstallGitLabWebhook() {
     unknown
   >({
     mutationFn: (resource: ResourceIdentifier) =>
-      IntegrationService.reinstallGitLabWebhook(resource),
+      integrationService.reinstallGitLabWebhook({ resource }),
     onSuccess: (data) => {
       // Invalidate and refetch the resources list
       queryClient.invalidateQueries({ queryKey: ["gitlab-resources"] });

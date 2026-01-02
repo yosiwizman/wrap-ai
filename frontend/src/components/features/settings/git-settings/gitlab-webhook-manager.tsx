@@ -181,6 +181,7 @@ export function GitLabWebhookManager({ className }: GitLabWebhookManagerProps) {
                         result?.success === true
                       }
                       className="cursor-pointer"
+                      testId={`reinstall-webhook-button-${key}`}
                     >
                       {isInstalling
                         ? t(I18nKey.GITLAB$WEBHOOK_REINSTALLING)

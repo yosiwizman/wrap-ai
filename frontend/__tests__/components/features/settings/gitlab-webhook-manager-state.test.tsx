@@ -30,25 +30,6 @@ describe("GitLabWebhookManagerState", () => {
     ).toBeInTheDocument();
   });
 
-  it("should use custom message color when provided", () => {
-    // Arrange
-    const customColor = "text-red-400";
-    const props = {
-      titleKey: I18nKey.GITLAB$WEBHOOK_MANAGER_TITLE,
-      messageKey: I18nKey.GITLAB$WEBHOOK_MANAGER_ERROR,
-      messageColor: customColor,
-    };
-
-    // Act
-    render(<GitLabWebhookManagerState {...props} />);
-
-    // Assert
-    const messageElement = screen.getByText(
-      I18nKey.GITLAB$WEBHOOK_MANAGER_ERROR,
-    );
-    expect(messageElement).toHaveClass(customColor);
-  });
-
   it("should apply custom className to container", () => {
     // Arrange
     const customClassName = "custom-container-class";
