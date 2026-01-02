@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import HTTPException, status
 from integrations.gitlab.gitlab_service import SaaSGitLabService
+from integrations.gitlab.webhook_installation import BreakLoopException
 from integrations.types import GitLabResourceType
 from server.routes.integration.gitlab import (
     ReinstallWebhookRequest,
@@ -13,7 +14,6 @@ from server.routes.integration.gitlab import (
     reinstall_gitlab_webhook,
 )
 from storage.gitlab_webhook import GitlabWebhook
-from sync.install_gitlab_webhooks import BreakLoopException
 
 
 @pytest.fixture

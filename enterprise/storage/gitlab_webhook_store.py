@@ -220,35 +220,6 @@ class GitlabWebhookStore:
                 return webhooks[0].webhook_secret
             return None
 
-    async def mark_webhook_for_reinstallation(self, user_id: str) -> int:
-        """Mark the webhook for a user for reinstallation by setting webhook_exists=False.
-
-        Args:
-            user_id: The user ID whose webhook should be marked for reinstallation
-
-        Returns:
-            The number of webhooks marked for reinstallation
-        """
-        async with self.a_session_maker() as session:
-            async with session.begin():
-                update_statement = (
-                    update(GitlabWebhook)
-                    .where(GitlabWebhook.user_id == user_id)
-                    .values(webhook_exists=False)
-                )
-                result = await session.execute(update_statement)
-                rows_updated = result.rowcount
-
-                logger.info(
-                    'Marked webhook for reinstallation',
-                    extra={
-                        'user_id': user_id,
-                        'webhook_marked': rows_updated,
-                    },
-                )
-
-                return rows_updated
-
     async def get_webhook_by_resource_only(
         self, resource_type: GitLabResourceType, resource_id: str
     ) -> GitlabWebhook | None:

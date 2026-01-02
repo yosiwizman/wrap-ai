@@ -3,14 +3,14 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from integrations.types import GitLabResourceType
-from integrations.utils import GITLAB_WEBHOOK_URL
-from storage.gitlab_webhook import GitlabWebhook, WebhookStatus
-from sync.install_gitlab_webhooks import (
+from integrations.gitlab.webhook_installation import (
     BreakLoopException,
     install_webhook_on_resource,
     verify_webhook_conditions,
 )
+from integrations.types import GitLabResourceType
+from integrations.utils import GITLAB_WEBHOOK_URL
+from storage.gitlab_webhook import GitlabWebhook, WebhookStatus
 
 
 @pytest.fixture

@@ -6,6 +6,11 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from integrations.gitlab.gitlab_manager import GitlabManager
 from integrations.gitlab.gitlab_service import SaaSGitLabService
+from integrations.gitlab.webhook_installation import (
+    BreakLoopException,
+    install_webhook_on_resource,
+    verify_webhook_conditions,
+)
 from integrations.models import Message, SourceType
 from integrations.types import GitLabResourceType
 from integrations.utils import GITLAB_WEBHOOK_URL
@@ -13,11 +18,6 @@ from pydantic import BaseModel
 from server.auth.token_manager import TokenManager
 from storage.gitlab_webhook import GitlabWebhook
 from storage.gitlab_webhook_store import GitlabWebhookStore
-from sync.install_gitlab_webhooks import (
-    BreakLoopException,
-    install_webhook_on_resource,
-    verify_webhook_conditions,
-)
 
 from openhands.core.logger import openhands_logger as logger
 from openhands.integrations.gitlab.gitlab_service import GitLabServiceImpl
