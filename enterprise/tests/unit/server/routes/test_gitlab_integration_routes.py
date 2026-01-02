@@ -1,161 +1,502 @@
 """Unit tests for GitLab integration routes."""
 
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import HTTPException, Request, status
-from fastapi.responses import JSONResponse
-from server.auth.saas_user_auth import SaasUserAuth
-from server.routes.integration.gitlab import reinstall_gitlab_webhook
+from fastapi import HTTPException, status
+from integrations.gitlab.gitlab_service import SaaSGitLabService
+from integrations.types import GitLabResourceType
+from server.routes.integration.gitlab import (
+    ReinstallWebhookRequest,
+    ResourceIdentifier,
+    get_gitlab_resources,
+    reinstall_gitlab_webhook,
+)
+from storage.gitlab_webhook import GitlabWebhook
+from sync.install_gitlab_webhooks import BreakLoopException
 
 
 @pytest.fixture
-def mock_request():
-    """Create a mock FastAPI Request."""
-    req = MagicMock(spec=Request)
-    req.headers = {}
-    req.cookies = {}
-    return req
+def mock_gitlab_service():
+    """Create a mock SaaSGitLabService instance."""
+    service = MagicMock(spec=SaaSGitLabService)
+    service.get_user_resources_with_admin_access = AsyncMock(
+        return_value=(
+            [
+                {
+                    'id': 1,
+                    'name': 'Test Project',
+                    'path_with_namespace': 'user/test-project',
+                    'namespace': {'kind': 'user'},
+                },
+                {
+                    'id': 2,
+                    'name': 'Group Project',
+                    'path_with_namespace': 'group/group-project',
+                    'namespace': {'kind': 'group'},
+                },
+            ],
+            [
+                {
+                    'id': 10,
+                    'name': 'Test Group',
+                    'full_path': 'test-group',
+                },
+            ],
+        )
+    )
+    service.check_webhook_exists_on_resource = AsyncMock(return_value=(True, None))
+    service.check_user_has_admin_access_to_resource = AsyncMock(
+        return_value=(True, None)
+    )
+    return service
 
 
 @pytest.fixture
-def mock_user_auth():
-    """Create a mock SaasUserAuth instance."""
-    auth = AsyncMock(spec=SaasUserAuth)
-    auth.get_user_id = AsyncMock(return_value='test_user_id')
-    return auth
+def mock_webhook():
+    """Create a mock webhook object."""
+    webhook = MagicMock(spec=GitlabWebhook)
+    webhook.webhook_uuid = 'test-uuid'
+    webhook.last_synced = None
+    return webhook
+
+
+class TestGetGitLabResources:
+    """Test cases for get_gitlab_resources endpoint."""
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.gitlab.GitLabServiceImpl')
+    @patch('server.routes.integration.gitlab.webhook_store')
+    @patch('server.routes.integration.gitlab.isinstance')
+    async def test_get_resources_success(
+        self,
+        mock_isinstance,
+        mock_webhook_store,
+        mock_gitlab_service_impl,
+        mock_gitlab_service,
+    ):
+        """Test successfully retrieving GitLab resources with webhook status."""
+        # Arrange
+        user_id = 'test_user_id'
+        mock_gitlab_service_impl.return_value = mock_gitlab_service
+        mock_isinstance.return_value = True
+        mock_webhook_store.get_webhooks_by_resources = AsyncMock(
+            return_value=({}, {})  # Empty maps for simplicity
+        )
+
+        # Act
+        response = await get_gitlab_resources(user_id=user_id)
+
+        # Assert
+        assert len(response.resources) == 2  # 1 project (filtered) + 1 group
+        assert response.resources[0].type == 'project'
+        assert response.resources[0].id == '1'
+        assert response.resources[0].name == 'Test Project'
+        assert response.resources[1].type == 'group'
+        assert response.resources[1].id == '10'
+        mock_gitlab_service.get_user_resources_with_admin_access.assert_called_once()
+        mock_webhook_store.get_webhooks_by_resources.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.gitlab.GitLabServiceImpl')
+    @patch('server.routes.integration.gitlab.webhook_store')
+    @patch('server.routes.integration.gitlab.isinstance')
+    async def test_get_resources_filters_nested_projects(
+        self,
+        mock_isinstance,
+        mock_webhook_store,
+        mock_gitlab_service_impl,
+        mock_gitlab_service,
+    ):
+        """Test that projects nested under groups are filtered out."""
+        # Arrange
+        user_id = 'test_user_id'
+        mock_gitlab_service_impl.return_value = mock_gitlab_service
+        mock_isinstance.return_value = True
+        mock_webhook_store.get_webhooks_by_resources = AsyncMock(return_value=({}, {}))
+
+        # Act
+        response = await get_gitlab_resources(user_id=user_id)
+
+        # Assert
+        # Should only include the user project, not the group project
+        project_resources = [r for r in response.resources if r.type == 'project']
+        assert len(project_resources) == 1
+        assert project_resources[0].id == '1'
+        assert project_resources[0].name == 'Test Project'
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.gitlab.GitLabServiceImpl')
+    @patch('server.routes.integration.gitlab.webhook_store')
+    @patch('server.routes.integration.gitlab.isinstance')
+    async def test_get_resources_includes_webhook_metadata(
+        self,
+        mock_isinstance,
+        mock_webhook_store,
+        mock_gitlab_service_impl,
+        mock_gitlab_service,
+        mock_webhook,
+    ):
+        """Test that webhook metadata is included in the response."""
+        # Arrange
+        user_id = 'test_user_id'
+        mock_gitlab_service_impl.return_value = mock_gitlab_service
+        mock_isinstance.return_value = True
+        mock_webhook_store.get_webhooks_by_resources = AsyncMock(
+            return_value=({'1': mock_webhook}, {'10': mock_webhook})
+        )
+
+        # Act
+        response = await get_gitlab_resources(user_id=user_id)
+
+        # Assert
+        assert response.resources[0].webhook_uuid == 'test-uuid'
+        assert response.resources[1].webhook_uuid == 'test-uuid'
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.gitlab.GitLabServiceImpl')
+    async def test_get_resources_non_saas_service(
+        self, mock_gitlab_service_impl, mock_gitlab_service
+    ):
+        """Test that non-SaaS GitLab service raises an error."""
+        # Arrange
+        user_id = 'test_user_id'
+        non_saas_service = AsyncMock()
+        mock_gitlab_service_impl.return_value = non_saas_service
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            await get_gitlab_resources(user_id=user_id)
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'Only SaaS GitLab service is supported' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.gitlab.GitLabServiceImpl')
+    @patch('server.routes.integration.gitlab.webhook_store')
+    @patch('server.routes.integration.gitlab.isinstance')
+    async def test_get_resources_parallel_api_calls(
+        self,
+        mock_isinstance,
+        mock_webhook_store,
+        mock_gitlab_service_impl,
+        mock_gitlab_service,
+    ):
+        """Test that webhook status checks are made in parallel."""
+        # Arrange
+        user_id = 'test_user_id'
+        mock_gitlab_service_impl.return_value = mock_gitlab_service
+        mock_isinstance.return_value = True
+        mock_webhook_store.get_webhooks_by_resources = AsyncMock(return_value=({}, {}))
+        call_count = 0
+
+        async def track_calls(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            return (True, None)
+
+        mock_gitlab_service.check_webhook_exists_on_resource = AsyncMock(
+            side_effect=track_calls
+        )
+
+        # Act
+        await get_gitlab_resources(user_id=user_id)
+
+        # Assert
+        # Should be called for each resource (1 project + 1 group)
+        assert call_count == 2
 
 
 class TestReinstallGitLabWebhook:
     """Test cases for reinstall_gitlab_webhook endpoint."""
 
     @pytest.mark.asyncio
-    @patch('server.routes.integration.gitlab.get_user_auth')
+    @patch('server.routes.integration.gitlab.install_webhook_on_resource')
+    @patch('server.routes.integration.gitlab.verify_webhook_conditions')
+    @patch('server.routes.integration.gitlab.GitLabServiceImpl')
     @patch('server.routes.integration.gitlab.webhook_store')
-    async def test_reinstall_webhook_success(
-        self, mock_webhook_store, mock_get_auth, mock_request, mock_user_auth
+    @patch('server.routes.integration.gitlab.isinstance')
+    async def test_reinstall_webhook_success_existing_webhook(
+        self,
+        mock_isinstance,
+        mock_webhook_store,
+        mock_gitlab_service_impl,
+        mock_verify_conditions,
+        mock_install_webhook,
+        mock_gitlab_service,
+        mock_webhook,
     ):
-        """Test successful webhook reinstallation request."""
+        """Test successful webhook reinstallation when webhook record exists."""
         # Arrange
-        mock_get_auth.return_value = mock_user_auth
-        mock_webhook_store.mark_webhook_for_reinstallation = AsyncMock(return_value=5)
+        user_id = 'test_user_id'
+        resource_id = 'project-123'
+        resource_type = GitLabResourceType.PROJECT
+
+        mock_gitlab_service_impl.return_value = mock_gitlab_service
+        mock_isinstance.return_value = True
+        mock_webhook_store.reset_webhook_for_reinstallation_by_resource = AsyncMock(
+            return_value=True
+        )
+        mock_webhook_store.get_webhook_by_resource_only = AsyncMock(
+            return_value=mock_webhook
+        )
+        mock_verify_conditions.return_value = None
+        mock_install_webhook.return_value = ('webhook-id-123', None)
+
+        body = ReinstallWebhookRequest(
+            resource=ResourceIdentifier(type=resource_type, id=resource_id)
+        )
 
         # Act
-        response = await reinstall_gitlab_webhook(mock_request)
+        result = await reinstall_gitlab_webhook(body=body, user_id=user_id)
 
         # Assert
-        assert isinstance(response, JSONResponse)
-        assert response.status_code == status.HTTP_200_OK
-
-        body = json.loads(response.body.decode('utf-8'))
-        assert body['message'] == 'Webhook marked for reinstallation'
-        assert body['webhook_marked'] == 5
-
-        mock_get_auth.assert_called_once_with(mock_request)
-        mock_user_auth.get_user_id.assert_called_once()
-        mock_webhook_store.mark_webhook_for_reinstallation.assert_called_once_with(
-            'test_user_id'
+        assert result.success is True
+        assert result.resource_id == resource_id
+        assert result.resource_type == resource_type.value
+        assert result.error is None
+        mock_gitlab_service.check_user_has_admin_access_to_resource.assert_called_once_with(
+            resource_type, resource_id
         )
+        mock_webhook_store.reset_webhook_for_reinstallation_by_resource.assert_called_once_with(
+            resource_type, resource_id, user_id
+        )
+        mock_verify_conditions.assert_called_once()
+        mock_install_webhook.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch('server.routes.integration.gitlab.get_user_auth')
+    @patch('server.routes.integration.gitlab.install_webhook_on_resource')
+    @patch('server.routes.integration.gitlab.verify_webhook_conditions')
+    @patch('server.routes.integration.gitlab.GitLabServiceImpl')
     @patch('server.routes.integration.gitlab.webhook_store')
-    async def test_reinstall_webhook_no_webhooks_found(
-        self, mock_webhook_store, mock_get_auth, mock_request, mock_user_auth
+    @patch('server.routes.integration.gitlab.isinstance')
+    async def test_reinstall_webhook_success_new_webhook_record(
+        self,
+        mock_isinstance,
+        mock_webhook_store,
+        mock_gitlab_service_impl,
+        mock_verify_conditions,
+        mock_install_webhook,
+        mock_gitlab_service,
     ):
-        """Test reinstallation when user has no webhooks."""
+        """Test successful webhook reinstallation when webhook record doesn't exist."""
         # Arrange
-        mock_get_auth.return_value = mock_user_auth
-        mock_webhook_store.mark_webhook_for_reinstallation = AsyncMock(return_value=0)
+        user_id = 'test_user_id'
+        resource_id = 'project-456'
+        resource_type = GitLabResourceType.PROJECT
+
+        mock_gitlab_service_impl.return_value = mock_gitlab_service
+        mock_isinstance.return_value = True
+        mock_webhook_store.reset_webhook_for_reinstallation_by_resource = (
+            AsyncMock(return_value=False)  # No existing webhook to reset
+        )
+        mock_webhook_store.get_webhook_by_resource_only = AsyncMock(
+            side_effect=[
+                None,
+                MagicMock(),
+            ]  # First call returns None, second returns new webhook
+        )
+        mock_webhook_store.store_webhooks = AsyncMock()
+        mock_verify_conditions.return_value = None
+        mock_install_webhook.return_value = ('webhook-id-456', None)
+
+        body = ReinstallWebhookRequest(
+            resource=ResourceIdentifier(type=resource_type, id=resource_id)
+        )
 
         # Act
-        response = await reinstall_gitlab_webhook(mock_request)
+        result = await reinstall_gitlab_webhook(body=body, user_id=user_id)
 
         # Assert
-        assert isinstance(response, JSONResponse)
-        assert response.status_code == status.HTTP_200_OK
-
-        body = json.loads(response.body.decode('utf-8'))
-        assert body['webhook_marked'] == 0
-
-    @pytest.mark.asyncio
-    @patch('server.routes.integration.gitlab.get_user_auth')
-    async def test_reinstall_webhook_user_not_authenticated(
-        self, mock_get_auth, mock_request, mock_user_auth
-    ):
-        """Test reinstallation when user is not authenticated."""
-        # Arrange
-        mock_get_auth.return_value = mock_user_auth
-        mock_user_auth.get_user_id.return_value = None
-
-        # Act & Assert
-        with pytest.raises(HTTPException) as exc_info:
-            await reinstall_gitlab_webhook(mock_request)
-
-        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
-        assert exc_info.value.detail == 'User not authenticated'
+        assert result.success is True
+        mock_webhook_store.store_webhooks.assert_called_once()
+        # Should fetch webhook twice: once to check, once after creating
+        assert mock_webhook_store.get_webhook_by_resource_only.call_count == 2
 
     @pytest.mark.asyncio
-    @patch('server.routes.integration.gitlab.get_user_auth')
-    async def test_reinstall_webhook_authentication_failure(
-        self, mock_get_auth, mock_request
+    @patch('server.routes.integration.gitlab.GitLabServiceImpl')
+    @patch('server.routes.integration.gitlab.isinstance')
+    async def test_reinstall_webhook_no_admin_access(
+        self, mock_isinstance, mock_gitlab_service_impl, mock_gitlab_service
     ):
-        """Test reinstallation when authentication fails."""
+        """Test reinstallation when user doesn't have admin access."""
         # Arrange
-        mock_get_auth.side_effect = HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail='Unauthorized'
+        user_id = 'test_user_id'
+        resource_id = 'project-789'
+        resource_type = GitLabResourceType.PROJECT
+
+        mock_gitlab_service_impl.return_value = mock_gitlab_service
+        mock_isinstance.return_value = True
+        mock_gitlab_service.check_user_has_admin_access_to_resource = AsyncMock(
+            return_value=(False, None)
+        )
+
+        body = ReinstallWebhookRequest(
+            resource=ResourceIdentifier(type=resource_type, id=resource_id)
         )
 
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
-            await reinstall_gitlab_webhook(mock_request)
+            await reinstall_gitlab_webhook(body=body, user_id=user_id)
 
-        assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+        assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+        assert 'does not have admin access' in exc_info.value.detail
 
     @pytest.mark.asyncio
-    @patch('server.routes.integration.gitlab.get_user_auth')
+    @patch('server.routes.integration.gitlab.GitLabServiceImpl')
+    async def test_reinstall_webhook_non_saas_service(self, mock_gitlab_service_impl):
+        """Test reinstallation with non-SaaS GitLab service."""
+        # Arrange
+        user_id = 'test_user_id'
+        resource_id = 'project-999'
+        resource_type = GitLabResourceType.PROJECT
+
+        non_saas_service = AsyncMock()
+        mock_gitlab_service_impl.return_value = non_saas_service
+
+        body = ReinstallWebhookRequest(
+            resource=ResourceIdentifier(type=resource_type, id=resource_id)
+        )
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            await reinstall_gitlab_webhook(body=body, user_id=user_id)
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'Only SaaS GitLab service is supported' in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.gitlab.install_webhook_on_resource')
+    @patch('server.routes.integration.gitlab.verify_webhook_conditions')
+    @patch('server.routes.integration.gitlab.GitLabServiceImpl')
     @patch('server.routes.integration.gitlab.webhook_store')
-    async def test_reinstall_webhook_database_error(
-        self, mock_webhook_store, mock_get_auth, mock_request, mock_user_auth
+    @patch('server.routes.integration.gitlab.isinstance')
+    async def test_reinstall_webhook_conditions_not_met(
+        self,
+        mock_isinstance,
+        mock_webhook_store,
+        mock_gitlab_service_impl,
+        mock_verify_conditions,
+        mock_install_webhook,
+        mock_gitlab_service,
+        mock_webhook,
     ):
-        """Test reinstallation when database operation fails."""
+        """Test reinstallation when webhook conditions are not met."""
         # Arrange
-        mock_get_auth.return_value = mock_user_auth
-        mock_webhook_store.mark_webhook_for_reinstallation = AsyncMock(
-            side_effect=Exception('Database connection error')
+        user_id = 'test_user_id'
+        resource_id = 'project-111'
+        resource_type = GitLabResourceType.PROJECT
+
+        mock_gitlab_service_impl.return_value = mock_gitlab_service
+        mock_isinstance.return_value = True
+        mock_webhook_store.reset_webhook_for_reinstallation_by_resource = AsyncMock(
+            return_value=True
+        )
+        mock_webhook_store.get_webhook_by_resource_only = AsyncMock(
+            return_value=mock_webhook
+        )
+        mock_verify_conditions.side_effect = BreakLoopException()
+
+        body = ReinstallWebhookRequest(
+            resource=ResourceIdentifier(type=resource_type, id=resource_id)
         )
 
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
-            await reinstall_gitlab_webhook(mock_request)
+            await reinstall_gitlab_webhook(body=body, user_id=user_id)
+
+        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'conditions not met' in exc_info.value.detail.lower()
+        mock_install_webhook.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch('server.routes.integration.gitlab.install_webhook_on_resource')
+    @patch('server.routes.integration.gitlab.verify_webhook_conditions')
+    @patch('server.routes.integration.gitlab.GitLabServiceImpl')
+    @patch('server.routes.integration.gitlab.webhook_store')
+    @patch('server.routes.integration.gitlab.isinstance')
+    async def test_reinstall_webhook_installation_fails(
+        self,
+        mock_isinstance,
+        mock_webhook_store,
+        mock_gitlab_service_impl,
+        mock_verify_conditions,
+        mock_install_webhook,
+        mock_gitlab_service,
+        mock_webhook,
+    ):
+        """Test reinstallation when webhook installation fails."""
+        # Arrange
+        user_id = 'test_user_id'
+        resource_id = 'project-222'
+        resource_type = GitLabResourceType.PROJECT
+
+        mock_gitlab_service_impl.return_value = mock_gitlab_service
+        mock_isinstance.return_value = True
+        mock_webhook_store.reset_webhook_for_reinstallation_by_resource = AsyncMock(
+            return_value=True
+        )
+        mock_webhook_store.get_webhook_by_resource_only = AsyncMock(
+            return_value=mock_webhook
+        )
+        mock_verify_conditions.return_value = None
+        mock_install_webhook.return_value = (None, None)  # Installation failed
+
+        body = ReinstallWebhookRequest(
+            resource=ResourceIdentifier(type=resource_type, id=resource_id)
+        )
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            await reinstall_gitlab_webhook(body=body, user_id=user_id)
 
         assert exc_info.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
-        assert exc_info.value.detail == 'Failed to mark webhook for reinstallation'
+        assert 'Failed to install webhook' in exc_info.value.detail
 
     @pytest.mark.asyncio
-    @patch('server.routes.integration.gitlab.get_user_auth')
+    @patch('server.routes.integration.gitlab.install_webhook_on_resource')
+    @patch('server.routes.integration.gitlab.verify_webhook_conditions')
+    @patch('server.routes.integration.gitlab.GitLabServiceImpl')
     @patch('server.routes.integration.gitlab.webhook_store')
-    @patch('server.routes.integration.gitlab.logger')
-    async def test_reinstall_webhook_logs_success(
+    @patch('server.routes.integration.gitlab.isinstance')
+    async def test_reinstall_webhook_group_resource(
         self,
-        mock_logger,
+        mock_isinstance,
         mock_webhook_store,
-        mock_get_auth,
-        mock_request,
-        mock_user_auth,
+        mock_gitlab_service_impl,
+        mock_verify_conditions,
+        mock_install_webhook,
+        mock_gitlab_service,
+        mock_webhook,
     ):
-        """Test that successful reinstallation is logged."""
+        """Test reinstallation for a group resource."""
         # Arrange
-        mock_get_auth.return_value = mock_user_auth
-        mock_webhook_store.mark_webhook_for_reinstallation = AsyncMock(return_value=3)
+        user_id = 'test_user_id'
+        resource_id = 'group-333'
+        resource_type = GitLabResourceType.GROUP
+
+        mock_gitlab_service_impl.return_value = mock_gitlab_service
+        mock_isinstance.return_value = True
+        mock_webhook_store.reset_webhook_for_reinstallation_by_resource = AsyncMock(
+            return_value=True
+        )
+        mock_webhook_store.get_webhook_by_resource_only = AsyncMock(
+            return_value=mock_webhook
+        )
+        mock_verify_conditions.return_value = None
+        mock_install_webhook.return_value = ('webhook-id-group', None)
+
+        body = ReinstallWebhookRequest(
+            resource=ResourceIdentifier(type=resource_type, id=resource_id)
+        )
 
         # Act
-        await reinstall_gitlab_webhook(mock_request)
+        result = await reinstall_gitlab_webhook(body=body, user_id=user_id)
 
         # Assert
-        mock_logger.info.assert_called_once()
-        call_args = mock_logger.info.call_args
-        assert 'GitLab webhook marked for reinstallation' in call_args[0][0]
-        assert call_args[1]['extra']['user_id'] == 'test_user_id'
-        assert call_args[1]['extra']['webhook_marked'] == 3
+        assert result.success is True
+        assert result.resource_id == resource_id
+        assert result.resource_type == resource_type.value
+        mock_webhook_store.reset_webhook_for_reinstallation_by_resource.assert_called_once_with(
+            resource_type, resource_id, user_id
+        )

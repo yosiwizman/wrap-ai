@@ -527,3 +527,80 @@ class SaaSGitLabService(GitLabService):
             await self._make_request(url=url, params=params, method=RequestMethod.POST)
         except Exception as e:
             logger.exception(f'[GitLab]: Reply to MR failed {e}')
+
+    async def get_user_resources_with_admin_access(
+        self,
+    ) -> tuple[list[dict], list[dict]]:
+        """
+        Get all projects and groups where the current user has admin access (maintainer or owner).
+
+        Returns:
+            tuple[list[dict], list[dict]]: A tuple containing:
+                - list of projects where user has admin access
+                - list of groups where user has admin access
+        """
+        projects_with_admin_access = []
+        groups_with_admin_access = []
+
+        # Fetch all projects the user is a member of
+        page = 1
+        per_page = 100
+        while True:
+            try:
+                url = f'{self.BASE_URL}/projects'
+                params = {
+                    'page': str(page),
+                    'per_page': str(per_page),
+                    'membership': 1,
+                    'min_access_level': 40,  # Maintainer or Owner
+                }
+                response, headers = await self._make_request(url, params)
+
+                if not response:
+                    break
+
+                projects_with_admin_access.extend(response)
+                page += 1
+
+                # Check if we've reached the last page
+                link_header = headers.get('Link', '')
+                if 'rel="next"' not in link_header:
+                    break
+
+            except Exception:
+                logger.warning(f'Error fetching projects on page {page}', exc_info=True)
+                break
+
+        # Fetch all groups where user is owner or maintainer
+        page = 1
+        while True:
+            try:
+                url = f'{self.BASE_URL}/groups'
+                params = {
+                    'page': str(page),
+                    'per_page': str(per_page),
+                    'min_access_level': 40,  # Maintainer or Owner
+                    'top_level_only': 'true',
+                }
+                response, headers = await self._make_request(url, params)
+
+                if not response:
+                    break
+
+                groups_with_admin_access.extend(response)
+                page += 1
+
+                # Check if we've reached the last page
+                link_header = headers.get('Link', '')
+                if 'rel="next"' not in link_header:
+                    break
+
+            except Exception:
+                logger.warning(f'Error fetching groups on page {page}', exc_info=True)
+                break
+
+        logger.info(
+            f'Found {len(projects_with_admin_access)} projects and {len(groups_with_admin_access)} groups with admin access'
+        )
+
+        return projects_with_admin_access, groups_with_admin_access

@@ -1,24 +1,47 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { useMutation } from "@tanstack/react-query";
 import { IntegrationService } from "#/api/integration-service/integration-service.api";
+import type {
+  ResourceIdentifier,
+  ResourceInstallationResult,
+} from "#/api/integration-service/integration-service.types";
+import { I18nKey } from "#/i18n/declaration";
 import {
   displayErrorToast,
   displaySuccessToast,
 } from "#/utils/custom-toast-handlers";
-import { retrieveAxiosErrorMessage } from "#/utils/retrieve-axios-error-message";
-import { I18nKey } from "#/i18n/declaration";
 
-export const useReinstallGitLabWebhook = () => {
+/**
+ * Hook to reinstall webhook on a specific resource
+ */
+export function useReinstallGitLabWebhook() {
+  const queryClient = useQueryClient();
   const { t } = useTranslation();
 
-  return useMutation({
-    mutationFn: () => IntegrationService.reinstallGitLabWebhook(),
-    onSuccess: () => {
-      displaySuccessToast(t(I18nKey.SETTINGS$GITLAB_INSTALLING_WEBHOOK));
+  return useMutation<
+    ResourceInstallationResult,
+    Error,
+    ResourceIdentifier,
+    unknown
+  >({
+    mutationFn: (resource: ResourceIdentifier) =>
+      IntegrationService.reinstallGitLabWebhook(resource),
+    onSuccess: (data) => {
+      // Invalidate and refetch the resources list
+      queryClient.invalidateQueries({ queryKey: ["gitlab-resources"] });
+
+      if (data.success) {
+        displaySuccessToast(t(I18nKey.GITLAB$WEBHOOK_REINSTALL_SUCCESS));
+      } else if (data.error) {
+        displayErrorToast(data.error);
+      } else {
+        displayErrorToast(t(I18nKey.GITLAB$WEBHOOK_REINSTALL_FAILED));
+      }
     },
     onError: (error) => {
-      const errorMessage = retrieveAxiosErrorMessage(error);
-      displayErrorToast(errorMessage || t(I18nKey.ERROR$GENERIC));
+      const errorMessage =
+        error?.message || t(I18nKey.GITLAB$WEBHOOK_REINSTALL_FAILED);
+      displayErrorToast(errorMessage);
     },
   });
-};
+}
