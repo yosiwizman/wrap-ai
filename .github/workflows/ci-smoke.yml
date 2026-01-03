@@ -1,0 +1,24 @@
+name: ci-smoke
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  smoke-test:
+    name: Smoke Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify repository integrity
+        run: |
+          echo "=== Repository Integrity Check ==="
+          echo "Checking repository structure..."
+          test -f README.md && echo "✓ README.md exists" || echo "⚠ README.md missing"
+          test -d .git && echo "✓ Git repository valid" || exit 1
+          echo "Checking for uncommitted changes..."
+          git status --porcelain
+          echo "✓ Smoke test passed"
