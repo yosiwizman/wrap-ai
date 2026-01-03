@@ -80,22 +80,52 @@ class SaaSGitLabService(GitLabService):
             logger.warning('external_auth_token and user_id not set!')
         return gitlab_token
 
-    async def get_owned_groups(self) -> list[dict]:
+    async def get_owned_groups(self, min_access_level: int = 40) -> list[dict]:
         """
-        Get all groups for which the current user is the owner.
+        Get all top-level groups where the current user has admin access.
+
+        This method supports pagination and fetches all groups where the user has
+        at least the specified access level.
+
+        Args:
+            min_access_level: Minimum access level required (default: 40 for Maintainer or Owner)
+                             - 40: Maintainer or Owner
+                             - 50: Owner only
 
         Returns:
-            list[dict]: A list of groups owned by the current user.
+            list[dict]: A list of groups where user has the specified access level or higher.
         """
-        url = f'{self.BASE_URL}/groups'
-        params = {'owned': 'true', 'per_page': 100, 'top_level_only': 'true'}
+        groups_with_admin_access = []
+        page = 1
+        per_page = 100
 
-        try:
-            response, headers = await self._make_request(url, params)
-            return response
-        except Exception:
-            logger.warning('Error fetching owned groups', exc_info=True)
-            return []
+        while True:
+            try:
+                url = f'{self.BASE_URL}/groups'
+                params = {
+                    'page': str(page),
+                    'per_page': str(per_page),
+                    'min_access_level': min_access_level,
+                    'top_level_only': 'true',
+                }
+                response, headers = await self._make_request(url, params)
+
+                if not response:
+                    break
+
+                groups_with_admin_access.extend(response)
+                page += 1
+
+                # Check if we've reached the last page
+                link_header = headers.get('Link', '')
+                if 'rel="next"' not in link_header:
+                    break
+
+            except Exception:
+                logger.warning(f'Error fetching groups on page {page}', exc_info=True)
+                break
+
+        return groups_with_admin_access
 
     async def add_owned_projects_and_groups_to_db(self, owned_personal_projects):
         """
@@ -572,32 +602,7 @@ class SaaSGitLabService(GitLabService):
                 break
 
         # Fetch all groups where user is owner or maintainer
-        page = 1
-        while True:
-            try:
-                url = f'{self.BASE_URL}/groups'
-                params = {
-                    'page': str(page),
-                    'per_page': str(per_page),
-                    'min_access_level': 40,  # Maintainer or Owner
-                    'top_level_only': 'true',
-                }
-                response, headers = await self._make_request(url, params)
-
-                if not response:
-                    break
-
-                groups_with_admin_access.extend(response)
-                page += 1
-
-                # Check if we've reached the last page
-                link_header = headers.get('Link', '')
-                if 'rel="next"' not in link_header:
-                    break
-
-            except Exception:
-                logger.warning(f'Error fetching groups on page {page}', exc_info=True)
-                break
+        groups_with_admin_access = await self.get_owned_groups(min_access_level=40)
 
         logger.info(
             f'Found {len(projects_with_admin_access)} projects and {len(groups_with_admin_access)} groups with admin access'
