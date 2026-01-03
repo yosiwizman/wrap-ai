@@ -176,7 +176,7 @@ export function GitLabWebhookManager({ className }: GitLabWebhookManagerProps) {
                       variant="primary"
                       onClick={() => handleReinstall(resource)}
                       isDisabled={
-                        isInstalling ||
+                        installingResource !== null ||
                         resource.webhook_installed ||
                         result?.success === true
                       }
